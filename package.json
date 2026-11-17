@@ -1,0 +1,19 @@
+{
+  "name": "tg",
+  "version": "1.0.0",
+  "description": "[![Python 3.14](https://img.shields.io/badge/Python-3.14-blue.svg)](https://python.org) [![Aiogram 3.32](https://img.shields.io/badge/Aiogram-3.32-blue.svg)](https://docs.aiogram.dev/) [![Telegram Mini App](https://img.shields.io/badge/Telegram_Mini_App-TMA_Glassmorphism-229ED9.svg)](https://core.telegram.org/bots/webapps) [![TradingView](https://img.shields.io/badge/Charts-TradingView_Advanced-2962FF.svg)](https://tradingview.com) [![Status](https://img.shields.io/badge/Status-Commercial_Production_Ready-success.svg)]()",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@astryxdesign/cli": "^0.7.16",
+    "@astryxdesign/core": "^0.7.16",
+    "@astryxdesign/theme-neutral": "^0.7.16",
+    "@stylexjs/stylex": "^0.19.2"
+  }
+}

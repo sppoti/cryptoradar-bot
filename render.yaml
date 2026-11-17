@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: cryptoradar-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_ID
+        value: "1639805642"
+      - key: VIP_CHANNEL_ID
+        value: "-1003961748562"
+      - key: CHANNEL_ID
+        value: "@cryptoradar_live777"
+      - key: WEBAPP_URL
+        value: "https://sppoti.github.io/cryptoradar-tma/"
+      - key: GEMINI_API_KEY
+        sync: false

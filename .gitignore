@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+node_modules/
+videos/*.mp4
+videos/*.mp3
+*.mp3
+tools/*.exe
+test_*.db
+bot_database.db
+.omo/
+.gemini/
