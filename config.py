@@ -34,7 +34,7 @@ AUTOPILOT_INTERVAL_HOURS = int(os.getenv("AUTOPILOT_INTERVAL_HOURS", "4"))
 PROJECT_NAME = os.getenv("PROJECT_NAME", "CryptoRadar & VIP Insider")
 
 # Ссылка на закрытый канал/чат или контент, выдаваемый после оплаты
-VIP_LINK = os.getenv("VIP_LINK", "https://t.me/+example_invite_link")
+VIP_LINK = os.getenv("VIP_LINK", "https://t.me/+DKWuBUM_YGZlM2Qy").strip()
 
 # Тарифы подписки в Telegram Stars (1 Star ≈ $0.02)
 TARIFFS = {

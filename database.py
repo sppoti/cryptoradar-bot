@@ -93,6 +93,16 @@ async def init_db():
                 is_active INTEGER DEFAULT 1
             )
         """)
+        
+        # Автоматическая инициализация вечной VIP-подписки для администратора
+        import config
+        if config.ADMIN_ID:
+            await db.execute("""
+                INSERT INTO users (user_id, username, first_name, sub_until)
+                VALUES (?, 'admin', 'Administrator', '2099-12-31T23:59:59')
+                ON CONFLICT(user_id) DO UPDATE SET sub_until = '2099-12-31T23:59:59'
+            """, (config.ADMIN_ID,))
+
         await db.commit()
 
 async def get_or_create_user(user_id: int, username: str, first_name: str, referrer_id: Optional[int] = None) -> Dict[str, Any]:
@@ -152,6 +162,9 @@ async def add_subscription_days(user_id: int, days: int):
         await db.commit()
 
 async def is_sub_active(user_id: int) -> bool:
+    import config
+    if config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID):
+        return True
     user = await get_user(user_id)
     if not user or not user["sub_until"]:
         return False
