@@ -113,7 +113,7 @@ async def process_successful_payment(message: Message):
         f"<a href='{vip_link}'>Нажмите сюда, чтобы войти в канал</a>\n\n"
         f"Спасибо за доверие!"
     )
-    await message.answer(text, parse_mode="HTML", reply_markup=kb.get_payment_success_keyboard(vip_link=vip_link))
+    await message.answer(text, parse_mode="HTML", reply_markup=kb.get_payment_success_keyboard(vip_link=vip_link, user_id=user_id, is_vip=True))
     
     # Уведомление администратору
     if config.ADMIN_ID:
@@ -276,7 +276,7 @@ async def cb_admin_approve(callback: CallbackQuery):
             f"👉 <b>Ваша ссылка в VIP-клуб:</b>\n"
             f"<a href='{vip_link}'>Войти в закрытый канал</a>"
         )
-        await callback.bot.send_message(user_id, user_msg, parse_mode="HTML", reply_markup=kb.get_payment_success_keyboard(vip_link=vip_link))
+        await callback.bot.send_message(user_id, user_msg, parse_mode="HTML", reply_markup=kb.get_payment_success_keyboard(vip_link=vip_link, user_id=user_id, is_vip=True))
     except Exception:
         pass
         

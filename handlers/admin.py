@@ -198,8 +198,10 @@ async def process_grant(message: Message, state: FSMContext):
         await message.bot.send_message(
             target_id,
             f"🎁 <b>Вам начислен VIP-доступ на +{days} дней!</b>\n\n"
-            f"👉 Ссылка в клуб: <a href='{vip_link}'>Войти в закрытый VIP-канал</a>",
-            parse_mode="HTML"
+            f"👉 Ссылка в клуб: <a href='{vip_link}'>Войти в закрытый VIP-канал</a>\n\n"
+            f"Вам открыт доступ ко всем закрытым сигналам и PRO-терминалу!",
+            parse_mode="HTML",
+            reply_markup=kb.get_payment_success_keyboard(vip_link=vip_link, user_id=target_id, is_vip=True)
         )
     except Exception:
         pass

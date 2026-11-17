@@ -103,7 +103,8 @@ async def cmd_start(message: Message, state: FSMContext):
                 coin = "BTC"
             base_webapp = config.WEBAPP_URL or ""
             sep = "&" if "?" in base_webapp else "?"
-            tma_url = f"{base_webapp}{sep}user_id={user_id}&vip={'1' if is_vip else '0'}&symbol={coin}"
+            api_url = os.getenv("RENDER_EXTERNAL_URL", "https://cryptoradar-bot-z1r3.onrender.com")
+            tma_url = f"{base_webapp}{sep}user_id={user_id}&vip={'1' if is_vip else '0'}&symbol={coin}&api={api_url}"
             status_text = "💎 <b>PRO VIP Активен</b>" if is_vip else "🔒 <b>Базовый доступ (Free)</b>"
             text = (
                 "🚀 <b>Торговый терминал CryptoRadar PRO</b>\n\n"
@@ -145,6 +146,7 @@ async def cmd_start(message: Message, state: FSMContext):
 
     await db.get_or_create_user(user_id, username, first_name, referrer_id)
     is_admin = (user_id == config.ADMIN_ID)
+    is_vip = await db.is_sub_active(user_id)
     
     text = (
         f"👋 <b>Приветствуем в {config.PROJECT_NAME}!</b>\n\n"
@@ -159,12 +161,14 @@ async def cmd_start(message: Message, state: FSMContext):
         f"Выберите раздел ниже или откройте WebApp Терминал 👇"
     )
     
-    await message.answer(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin))
+    await message.answer(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin, user_id=user_id, is_vip=is_vip))
 
 @router.message(Command("webapp"))
 @router.message(Command("app"))
 async def cmd_webapp(message: Message):
     """Команда /webapp или /app для открытия Mini App терминала."""
+    user_id = message.from_user.id
+    is_vip = await db.is_sub_active(user_id)
     text = (
         f"📱 <b>Интерактивный WebApp Терминал {config.PROJECT_NAME}</b>\n\n"
         f"Торговый интерфейс институционального уровня прямо внутри Telegram:\n\n"
@@ -174,12 +178,14 @@ async def cmd_webapp(message: Message):
         f"💎 <b>Мгновенное управление VIP-подпиской</b> через Telegram Stars (⭐) с автоматической выдачей\n\n"
         f"Нажмите кнопку ниже для запуска терминала 👇"
     )
-    await message.answer(text, parse_mode="HTML", reply_markup=kb.get_webapp_keyboard())
+    await message.answer(text, parse_mode="HTML", reply_markup=kb.get_webapp_keyboard(user_id=user_id, is_vip=is_vip))
 
 @router.message(Command("help", "menu"))
 async def cmd_help(message: Message):
     """Команда /help или /menu для быстрой навигации."""
-    is_admin = (message.from_user.id == config.ADMIN_ID)
+    user_id = message.from_user.id
+    is_admin = (user_id == config.ADMIN_ID)
+    is_vip = await db.is_sub_active(user_id)
     text = (
         f"🧭 <b>Навигация по платформе {config.PROJECT_NAME}:</b>\n\n"
         f"• <b>/start</b> — Главное меню и сводка возможностей\n"
@@ -190,20 +196,22 @@ async def cmd_help(message: Message):
         f"• <b>/help</b> — Справка по командам\n\n"
         f"Выберите раздел в меню ниже 👇"
     )
-    await message.answer(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin))
+    await message.answer(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin, user_id=user_id, is_vip=is_vip))
 
 @router.callback_query(F.data == "main_menu")
 async def cb_main_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    is_admin = (callback.from_user.id == config.ADMIN_ID)
+    user_id = callback.from_user.id
+    is_admin = (user_id == config.ADMIN_ID)
+    is_vip = await db.is_sub_active(user_id)
     text = (
         f"🏠 <b>Главное меню {config.PROJECT_NAME}</b>\n\n"
         f"Выберите интересующий инструмент:"
     )
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin))
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin, user_id=user_id, is_vip=is_vip))
     except Exception:
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin))
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin, user_id=user_id, is_vip=is_vip))
     await callback.answer()
 
 @router.callback_query(F.data == "tariffs")

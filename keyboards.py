@@ -1,13 +1,38 @@
+import os
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 import config
 from services import knowledge_base
 
-def get_main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
+def get_tma_url(user_id: int = None, is_vip: bool = False, coin: str = None) -> str:
+    """Формирует URL для запуска Telegram Mini App с параметрами авторизации и API."""
+    base = config.WEBAPP_URL or "https://sppoti.github.io/cryptoradar-tma/"
+    params = []
+    if user_id and "user_id=" not in base:
+        params.append(f"user_id={user_id}")
+    if is_vip and "vip=" not in base:
+        params.append("vip=1")
+    if coin and "symbol=" not in base:
+        params.append(f"symbol={coin}")
+    if "api=" not in base:
+        api_url = os.getenv("RENDER_EXTERNAL_URL", "https://cryptoradar-bot-z1r3.onrender.com")
+        if api_url:
+            params.append(f"api={api_url}")
+    
+    if not params:
+        return base
+    sep = "&" if "?" in base else "?"
+    return f"{base}{sep}{'&'.join(params)}"
+
+def get_main_menu(is_admin: bool = False, user_id: int = None, is_vip: bool = False) -> InlineKeyboardMarkup:
     """Главное меню бота с доступом к сервисам и Telegram Mini App."""
+    webapp_url = get_tma_url(user_id=user_id, is_vip=is_vip)
+    webapp_text = "📱 Открыть WebApp Терминал (PRO VIP)" if is_vip else "📱 Открыть WebApp Терминал (PRO)"
+    tariffs_text = "⭐ Продлить VIP-доступ" if is_vip else "💎 Оформить VIP-доступ"
+
     buttons = [
-        [InlineKeyboardButton(text="📱 Открыть WebApp Терминал (PRO)", web_app=WebAppInfo(url=config.WEBAPP_URL))],
+        [InlineKeyboardButton(text=webapp_text, web_app=WebAppInfo(url=webapp_url))],
         [InlineKeyboardButton(text="🔐 Перейти в VIP-канал", callback_data="enter_vip_channel")],
-        [InlineKeyboardButton(text="💎 Оформить VIP-доступ", callback_data="tariffs")],
+        [InlineKeyboardButton(text=tariffs_text, callback_data="tariffs")],
         [
             InlineKeyboardButton(text="🌐 Обзор рынка (Live)", callback_data="market_overview"),
             InlineKeyboardButton(text="📊 Анализ монеты", callback_data="coin_select")
@@ -31,12 +56,15 @@ def get_main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
         
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_webapp_keyboard() -> InlineKeyboardMarkup:
+def get_webapp_keyboard(user_id: int = None, is_vip: bool = False) -> InlineKeyboardMarkup:
     """Клавиатура для прямого запуска Telegram Mini App терминала."""
+    webapp_url = get_tma_url(user_id=user_id, is_vip=is_vip)
+    webapp_text = "🚀 Запустить WebApp Терминал (PRO VIP)" if is_vip else "🚀 Запустить WebApp Терминал"
+    tariffs_text = "⭐ Продлить VIP-доступ" if is_vip else "💎 Оформить VIP-доступ"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 Запустить WebApp Терминал", web_app=WebAppInfo(url=config.WEBAPP_URL))],
+        [InlineKeyboardButton(text=webapp_text, web_app=WebAppInfo(url=webapp_url))],
         [InlineKeyboardButton(text="🔐 Перейти в VIP-канал", callback_data="enter_vip_channel")],
-        [InlineKeyboardButton(text="💎 Оформить VIP-доступ", callback_data="tariffs")],
+        [InlineKeyboardButton(text=tariffs_text, callback_data="tariffs")],
         [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="main_menu")]
     ])
 
@@ -134,15 +162,16 @@ def get_payment_methods(tariff_key: str) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_payment_success_keyboard(vip_link: str = None) -> InlineKeyboardMarkup:
+def get_payment_success_keyboard(vip_link: str = None, user_id: int = None, is_vip: bool = True) -> InlineKeyboardMarkup:
     """Клавиатура после успешной оплаты с моментальным доступом в WebApp."""
     vip_btn = (
         InlineKeyboardButton(text="🔐 Перейти в VIP-канал", url=vip_link)
         if vip_link
         else InlineKeyboardButton(text="🔐 Перейти в VIP-канал", callback_data="enter_vip_channel")
     )
+    webapp_url = get_tma_url(user_id=user_id, is_vip=is_vip)
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 Открыть WebApp Терминал PRO", web_app=WebAppInfo(url=config.WEBAPP_URL))],
+        [InlineKeyboardButton(text="🚀 Открыть WebApp Терминал PRO", web_app=WebAppInfo(url=webapp_url))],
         [vip_btn],
         [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="main_menu")]
     ])

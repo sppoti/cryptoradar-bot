@@ -724,7 +724,22 @@ class TestTelegramBotUIAndRouters(unittest.TestCase):
             None
         )
         self.assertIsNotNone(webapp_btn_user, "В главном меню пользователя обязана быть кнопка запуска TMA WebApp")
-        self.assertEqual(webapp_btn_user.web_app.url, config.WEBAPP_URL)
+        self.assertEqual(webapp_btn_user.web_app.url, kb.get_tma_url(user_id=None, is_vip=False))
+        self.assertIn("api=", webapp_btn_user.web_app.url)
+
+        # Главное меню VIP-пользователя
+        main_vip = kb.get_main_menu(is_admin=False, user_id=12345, is_vip=True)
+        webapp_btn_vip = next(
+            (b for row in main_vip.inline_keyboard for b in row if b.web_app and isinstance(b.web_app, WebAppInfo)),
+            None
+        )
+        self.assertIsNotNone(webapp_btn_vip)
+        self.assertIn("PRO VIP", webapp_btn_vip.text)
+        self.assertIn("vip=1", webapp_btn_vip.web_app.url)
+        self.assertIn("user_id=12345", webapp_btn_vip.web_app.url)
+        tariffs_btn = next((b for row in main_vip.inline_keyboard for b in row if b.callback_data == "tariffs"), None)
+        self.assertIsNotNone(tariffs_btn)
+        self.assertEqual(tariffs_btn.text, "⭐ Продлить VIP-доступ")
 
         # Главное меню администратора (содержит кнопку админки)
         main_admin = kb.get_main_menu(is_admin=True)
