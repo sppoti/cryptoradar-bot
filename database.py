@@ -143,6 +143,16 @@ async def add_subscription_days(user_id: int, days: int):
         row = await cursor.fetchone()
         
         now = datetime.datetime.now()
+        if not row:
+            new_date = now + datetime.timedelta(days=days)
+            await db.execute(
+                "INSERT INTO users (user_id, username, first_name, sub_until) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET sub_until = excluded.sub_until",
+                (user_id, "", "Трейдер", new_date.isoformat())
+            )
+            await db.commit()
+            return
+
         current_sub = None
         if row and row["sub_until"]:
             try:
@@ -163,8 +173,11 @@ async def add_subscription_days(user_id: int, days: int):
 
 async def is_sub_active(user_id: int) -> bool:
     import config
-    if config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID):
-        return True
+    try:
+        if config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID):
+            return True
+    except (ValueError, TypeError):
+        pass
     user = await get_user(user_id)
     if not user or not user["sub_until"]:
         return False

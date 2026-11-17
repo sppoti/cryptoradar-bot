@@ -5,6 +5,7 @@ import logging
 import os
 import pathlib
 import time
+from urllib.parse import parse_qs, unquote
 from typing import Dict, Any, List, Optional
 
 from aiohttp import web
@@ -146,25 +147,46 @@ async def cors_middleware(request: web.Request, handler):
 # --- ХЕНДЛЕРЫ СТАТИКИ ---
 
 async def handle_index(request: web.Request) -> web.Response:
-    """Отдача главной страницы WebApp."""
+    """Отдача главной страницы WebApp с заголовками анти-кэширования."""
     index_file = WEBAPP_DIR / "index.html"
     if not index_file.exists():
         return web.Response(text="<h1>WebApp in progress...</h1>", content_type="text/html")
-    return web.FileResponse(index_file)
+    return web.FileResponse(
+        index_file,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 async def handle_style(request: web.Request) -> web.Response:
-    """Отдача CSS-стилей."""
+    """Отдача CSS-стилей с заголовками анти-кэширования."""
     css_file = WEBAPP_DIR / "style.css"
     if not css_file.exists():
         return web.Response(text="/* CSS not found */", content_type="text/css")
-    return web.FileResponse(css_file)
+    return web.FileResponse(
+        css_file,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 async def handle_script(request: web.Request) -> web.Response:
-    """Отдача JavaScript клиента."""
+    """Отдача JavaScript клиента с заголовками анти-кэширования."""
     js_file = WEBAPP_DIR / "app.js"
     if not js_file.exists():
         return web.Response(text="// JS not found", content_type="application/javascript")
-    return web.FileResponse(js_file)
+    return web.FileResponse(
+        js_file,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 # --- REST API ХЕНДЛЕРЫ ---
 
@@ -411,14 +433,45 @@ async def handle_tariffs(request: web.Request) -> web.Response:
         }
     })
 
+def extract_user_id_from_request(request: web.Request) -> Optional[int]:
+    """Извлекает user_id из query параметров, заголовков или Telegram initData."""
+    # 1. Query parameter
+    user_id_param = request.query.get("user_id")
+    if user_id_param and user_id_param.isdigit():
+        return int(user_id_param)
+        
+    # 2. HTTP headers
+    for header_name in ("X-Telegram-User-Id", "X-User-Id"):
+        val = request.headers.get(header_name)
+        if val and val.isdigit():
+            return int(val)
+            
+    # 3. Telegram initData in header or query
+    raw_init_data = (
+        request.headers.get("X-Telegram-Init-Data")
+        or request.query.get("init_data")
+        or request.query.get("tgWebAppData")
+    )
+    if raw_init_data:
+        try:
+            parsed = parse_qs(raw_init_data)
+            if "user" in parsed:
+                user_json = json.loads(parsed["user"][0])
+                if isinstance(user_json, dict) and "id" in user_json:
+                    return int(user_json["id"])
+        except Exception:
+            pass
+            
+    return None
+
 async def handle_user_status(request: web.Request) -> web.Response:
     """
     Эндпоинт /api/user-status
-    Принимает user_id через query-параметр или заголовок.
+    Принимает user_id через query-параметр, заголовок или initData.
     Возвращает актуальный статус подписки, рефералов и рейтинг.
     """
-    user_id_param = request.query.get("user_id")
-    if not user_id_param or not user_id_param.isdigit():
+    user_id = extract_user_id_from_request(request)
+    if not user_id:
         return web.json_response({
             "status": "success",
             "user": {
@@ -434,25 +487,26 @@ async def handle_user_status(request: web.Request) -> web.Response:
             }
         })
 
-    user_id = int(user_id_param)
     user = await db.get_user(user_id)
     is_vip = await db.is_sub_active(user_id)
     ref_count = await db.get_referral_count(user_id)
     rank, _ = await db.get_user_rank(user_id)
 
     if not user:
+        is_admin = bool(config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID))
+        sub_until_val = "Бессрочно (Admin)" if is_admin else None
         return web.json_response({
             "status": "success",
             "user": {
                 "user_id": user_id,
                 "username": "",
-                "first_name": "Трейдер",
-                "is_vip": False,
+                "first_name": "Администратор" if is_admin else "Трейдер",
+                "is_vip": is_vip,
                 "is_guest": False,
-                "sub_until": None,
+                "sub_until": sub_until_val,
                 "referrals_count": ref_count,
                 "rank": rank,
-                "vip_link": None
+                "vip_link": config.VIP_LINK if is_vip else None
             }
         })
 
@@ -463,13 +517,15 @@ async def handle_user_status(request: web.Request) -> web.Response:
             sub_until_formatted = dt.strftime("%d.%m.%Y %H:%M")
         except Exception:
             sub_until_formatted = user["sub_until"]
+    elif config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID):
+        sub_until_formatted = "Бессрочно (Admin)"
 
     return web.json_response({
         "status": "success",
         "user": {
             "user_id": user_id,
             "username": user.get("username") or "",
-            "first_name": user.get("first_name") or "Трейдер",
+            "first_name": user.get("first_name") or ("Администратор" if (config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID)) else "Трейдер"),
             "is_vip": is_vip,
             "is_guest": False,
             "sub_until": sub_until_formatted,
