@@ -4,7 +4,19 @@ import html
 import re
 from typing import Dict, Any, List, Optional
 
-BINANCE_API_URL = "https://api.binance.com/api/v3"
+BINANCE_API_URL = "https://data-api.binance.vision/api/v3"
+
+BINANCE_MIRRORS = [
+    "https://data-api.binance.vision/api/v3",
+    "https://api.binance.com/api/v3",
+    "https://api1.binance.com/api/v3",
+    "https://api2.binance.com/api/v3",
+    "https://api3.binance.com/api/v3",
+]
+
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+}
 
 # Список отслеживаемых популярных активов
 TOP_SYMBOLS = [
@@ -18,20 +30,56 @@ TOP_SYMBOLS = [
 ]
 
 async def fetch_json(url: str) -> Optional[Any]:
-    """Асинхронный HTTP GET запрос."""
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-    except Exception as e:
-        print(f"Ошибка запроса к {url}: {e}")
+    """Асинхронный HTTP GET запрос с поддержкой зеркал и защиты от блокировок."""
+    urls_to_try = [url]
+    if "binance" in url and "/api/v3" in url:
+        path = url.split("/api/v3")[-1]
+        urls_to_try = [f"{mirror}{path}" for mirror in BINANCE_MIRRORS]
+
+    for target_url in urls_to_try:
+        try:
+            async with aiohttp.ClientSession(headers=DEFAULT_HEADERS) as session:
+                async with session.get(target_url, timeout=aiohttp.ClientTimeout(total=4)) as resp:
+                    if resp.status == 200:
+                        return await resp.json()
+        except Exception:
+            continue
     return None
 
 async def get_ticker_24hr(symbol: str) -> Optional[Dict[str, Any]]:
-    """Получить 24ч статистику по монете."""
+    """Получить 24ч статистику по монете (Binance Vision -> Binance -> Bybit)."""
     url = f"{BINANCE_API_URL}/ticker/24hr?symbol={symbol.upper()}"
-    return await fetch_json(url)
+    data = await fetch_json(url)
+    if data and isinstance(data, dict) and "lastPrice" in data:
+        return data
+
+    # Надежный резервный шлюз: Bybit Spot Ticker (без географических блокировок)
+    try:
+        bybit_url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol.upper()}"
+        async with aiohttp.ClientSession(headers=DEFAULT_HEADERS) as session:
+            async with session.get(bybit_url, timeout=aiohttp.ClientTimeout(total=4)) as resp:
+                if resp.status == 200:
+                    bj = await resp.json()
+                    items = bj.get("result", {}).get("list", [])
+                    if items:
+                        b = items[0]
+                        last_p = float(b.get("lastPrice", 0) or 0)
+                        high_p = float(b.get("highPrice24h", 0) or 0)
+                        low_p = float(b.get("lowPrice24h", 0) or 0)
+                        chg = float(b.get("price24hPcnt", 0) or 0) * 100
+                        vol = float(b.get("turnover24h", 0) or 0)
+                        return {
+                            "symbol": b.get("symbol"),
+                            "lastPrice": str(last_p),
+                            "priceChangePercent": str(round(chg, 2)),
+                            "highPrice": str(high_p),
+                            "lowPrice": str(low_p),
+                            "quoteVolume": str(vol)
+                        }
+    except Exception:
+        pass
+
+    return None
 
 async def get_top_market_tickers(limit: int = 10) -> List[Dict[str, Any]]:
     """Получить топ-активы по объему торгов и динамике за 24ч с Binance."""
@@ -61,17 +109,33 @@ CYRILLIC_LOOKALIKES = {
 CYRILLIC_TRANS_TABLE = str.maketrans(CYRILLIC_LOOKALIKES)
 
 async def calculate_rsi(symbol: str, interval: str = "1h", period: int = 14) -> Optional[float]:
-    """Рассчитать индекс относительной силы (RSI)."""
+    """Рассчитать индекс относительной силы (RSI) с поддержкой зеркал и Bybit."""
     url = f"{BINANCE_API_URL}/klines?symbol={symbol.upper()}&interval={interval}&limit={period + 15}"
     candles = await fetch_json(url)
-    if not isinstance(candles, list) or len(candles) < period + 1:
-        return None
-        
-    try:
-        closes = [float(c[4]) for c in candles if isinstance(c, (list, tuple)) and len(c) > 4]
-        if len(closes) < period + 1:
-            return None
-    except Exception:
+    closes = []
+    if isinstance(candles, list) and len(candles) >= period + 1:
+        try:
+            closes = [float(c[4]) for c in candles if isinstance(c, (list, tuple)) and len(c) > 4]
+        except Exception:
+            closes = []
+
+    # Bybit fallback
+    if len(closes) < period + 1:
+        try:
+            bybit_int = "60" if interval == "1h" else ("240" if interval == "4h" else "D")
+            bybit_kline_url = f"https://api.bybit.com/v5/market/kline?category=spot&symbol={symbol.upper()}&interval={bybit_int}&limit={period + 15}"
+            async with aiohttp.ClientSession(headers=DEFAULT_HEADERS) as session:
+                async with session.get(bybit_kline_url, timeout=aiohttp.ClientTimeout(total=4)) as resp:
+                    if resp.status == 200:
+                        bj = await resp.json()
+                        list_candles = bj.get("result", {}).get("list", [])
+                        if list_candles and len(list_candles) >= period + 1:
+                            list_candles.reverse()
+                            closes = [float(c[4]) for c in list_candles if len(c) > 4]
+        except Exception:
+            pass
+
+    if len(closes) < period + 1:
         return None
 
     gains = []

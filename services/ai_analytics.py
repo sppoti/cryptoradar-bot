@@ -27,7 +27,7 @@ except ImportError:
     GENAI_AVAILABLE = False
     logger.warning("google-genai библиотека не установлена или недоступна.")
 
-BINANCE_API_URL = "https://api.binance.com/api/v3"
+BINANCE_API_URL = "https://data-api.binance.vision/api/v3"
 
 # Время жизни оперативного кеша (3 минуты)
 CACHE_TTL_SECONDS = 180
@@ -188,11 +188,27 @@ def calculate_atr(highs: List[float], lows: List[float], closes: List[float], pe
 
 
 async def fetch_klines(symbol: str, interval: str = "1h", limit: int = 100) -> List[List[Any]]:
-    """Асинхронная выгрузка исторических свечей с Binance."""
+    """Асинхронная выгрузка исторических свечей (Binance Vision -> Bybit)."""
     url = f"{BINANCE_API_URL}/klines?symbol={symbol.upper()}&interval={interval}&limit={limit}"
     data = await scanner.fetch_json(url)
-    if isinstance(data, list):
+    if isinstance(data, list) and len(data) > 0:
         return data
+
+    # Fallback Bybit
+    try:
+        bybit_int = "60" if interval == "1h" else ("240" if interval == "4h" else "D")
+        bybit_kline_url = f"https://api.bybit.com/v5/market/kline?category=spot&symbol={symbol.upper()}&interval={bybit_int}&limit={limit}"
+        bybit_data = await scanner.fetch_json(bybit_kline_url)
+        if isinstance(bybit_data, dict):
+            candles = bybit_data.get("result", {}).get("list", [])
+            if candles:
+                candles = list(reversed(candles))
+                return [
+                    [int(c[0]), c[1], c[2], c[3], c[4], c[5], int(c[0]) + 3600000]
+                    for c in candles if len(c) >= 6
+                ]
+    except Exception:
+        pass
     return []
 
 
