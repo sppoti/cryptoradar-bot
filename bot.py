@@ -24,21 +24,34 @@ logging.basicConfig(
 logger = logging.getLogger("TGBot")
 
 async def main():
+    # 1. Запуск TMA Web API сервера в первую очередь (для прохождения Health Check на хостинге/Render)
+    web_runner = None
+    try:
+        web_runner = await web_server.start_web_server(config.WEB_HOST, config.WEB_PORT)
+    except Exception as e:
+        logger.warning(f"Веб-сервер не запущен в процессе бота: {e}")
+
+    # 2. Проверка BOT_TOKEN
     if not config.BOT_TOKEN or config.BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
-        logger.error("❌ ОШИБКА: Не указан BOT_TOKEN в файле .env!")
+        logger.error("❌ ОШИБКА: Не указан BOT_TOKEN в переменных окружения!")
         print("\n" + "="*60)
-        print("ВНИМАНИЕ! Вы еще не указали токен бота в файле .env.")
-        print("1. Откройте в Telegram бота @BotFather и создайте нового бота (/newbot).")
-        print("2. Скопируйте полученный токен.")
-        print("3. Вставьте его в файл c:\\TG\\.env в поле BOT_TOKEN=")
+        print("ВНИМАНИЕ! Не указан токен бота.")
+        print("Веб-сервер запущен для Health Check. Укажите BOT_TOKEN в настройках Environment.")
         print("="*60 + "\n")
+        # Удерживаем процесс живым для Render
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        finally:
+            if web_runner:
+                await web_runner.cleanup()
         return
 
-    # Инициализация базы данных
+    # 3. Инициализация базы данных
     logger.info("Инициализация базы данных SQLite...")
     await db.init_db()
 
-    # Создание экземпляра бота и диспетчера
+    # 4. Создание экземпляра бота и диспетчера
     bot = Bot(
         token=config.BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
@@ -67,13 +80,6 @@ async def main():
     else:
         logger.info("VIP_CHANNEL_ID не настроен — используется обратная совместимость со статической ссылкой VIP_LINK.")
 
-    # Запуск TMA Web API сервера рядом с ботом
-    web_runner = None
-    try:
-        web_runner = await web_server.start_web_server(config.WEB_HOST, config.WEB_PORT)
-    except Exception as e:
-        logger.warning(f"Веб-сервер не запущен в процессе бота (возможно порт занят или запущен отдельно): {e}")
-
     # Синхронизация Telegram Bot API (команды и WebApp Menu Button)
     if config.WEBAPP_URL and config.WEBAPP_URL.startswith("https://"):
         try:
@@ -94,7 +100,15 @@ async def main():
         # Удаляем вебхуки и запускаем polling
         await bot.delete_webhook(drop_pending_updates=True)
         allowed_updates = dp.resolve_used_update_types()
-        await dp.start_polling(bot, allowed_updates=allowed_updates)
+        
+        # Устойчивый цикл polling
+        while True:
+            try:
+                await dp.start_polling(bot, allowed_updates=allowed_updates)
+                break
+            except Exception as poll_err:
+                logger.warning(f"Ошибка polling: {poll_err}. Переподключение через 10 сек...")
+                await asyncio.sleep(10)
     except Exception as e:
         logger.error(f"Ошибка при работе бота: {e}")
     finally:
