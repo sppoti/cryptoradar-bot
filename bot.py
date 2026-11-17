@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import signal
 import sys
 
 from aiogram import Bot, Dispatcher
@@ -22,6 +23,26 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("TGBot")
+
+
+class TelegramConflictFilter(logging.Filter):
+    """
+    Фильтр для подавления ложных тревог TelegramConflictError
+    во время бесшовного перезапуска контейнеров на Render (Zero-Downtime Deployment).
+    Понижает уровень записи с ERROR до INFO.
+    """
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "TelegramConflictError" in msg or "Conflict: terminated by other getUpdates" in msg:
+            # Downgrade from ERROR to INFO so it doesn't alarm the user with red error badges on Render
+            record.levelno = logging.INFO
+            record.levelname = "INFO"
+            record.msg = "Облачный перезапуск (Zero-downtime): ожидание завершения предыдущего контейнера..."
+            record.args = ()
+        return True
+
+
+logging.getLogger("aiogram.dispatcher").addFilter(TelegramConflictFilter())
 
 async def main():
     # 1. Запуск TMA Web API сервера в первую очередь (для прохождения Health Check на хостинге/Render)
@@ -97,21 +118,63 @@ async def main():
         print("Для остановки нажмите Ctrl+C")
         print("*"*55 + "\n")
         
-        # Удаляем вебхуки и запускаем polling
-        await bot.delete_webhook(drop_pending_updates=True)
+        # Удаляем вебхуки (сохраняя накопившиеся обновления) и запускаем polling
+        await bot.delete_webhook(drop_pending_updates=False)
         allowed_updates = dp.resolve_used_update_types()
+
+        # Регистрация обработчиков сигналов для корректного завершения (Render Zero-Downtime)
+        loop = asyncio.get_running_loop()
+        stop_event = asyncio.Event()
+
+        def _handle_exit_signal(sig_name: str = ""):
+            logger.info(f"Получен сигнал {sig_name}. Плавная остановка polling (Render Zero-Downtime)...")
+            stop_event.set()
+            if dp._running_lock.locked():
+                asyncio.create_task(dp.stop_polling())
+
+        for sig in (getattr(signal, "SIGTERM", None), getattr(signal, "SIGINT", None)):
+            if sig is not None:
+                try:
+                    loop.add_signal_handler(sig, _handle_exit_signal, sig.name)
+                except (NotImplementedError, ValueError):
+                    try:
+                        signal.signal(
+                            sig,
+                            lambda s, f: _handle_exit_signal(
+                                signal.Signals(s).name if hasattr(signal, "Signals") else str(s)
+                            ),
+                        )
+                    except (ValueError, AttributeError):
+                        pass
         
         # Устойчивый цикл polling
-        while True:
+        while not stop_event.is_set():
             try:
-                await dp.start_polling(bot, allowed_updates=allowed_updates)
+                await dp.start_polling(
+                    bot,
+                    allowed_updates=allowed_updates,
+                    handle_signals=False,
+                )
                 break
             except Exception as poll_err:
+                if stop_event.is_set():
+                    break
                 logger.warning(f"Ошибка polling: {poll_err}. Переподключение через 10 сек...")
-                await asyncio.sleep(10)
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=10)
+                    break
+                except asyncio.TimeoutError:
+                    pass
     except Exception as e:
         logger.error(f"Ошибка при работе бота: {e}")
     finally:
+        if "loop" in locals() and loop is not None:
+            for sig in (getattr(signal, "SIGTERM", None), getattr(signal, "SIGINT", None)):
+                if sig is not None:
+                    try:
+                        loop.remove_signal_handler(sig)
+                    except (NotImplementedError, ValueError, RuntimeError):
+                        pass
         if autopilot_task:
             autopilot_task.cancel()
         if vip_expiry_task:
