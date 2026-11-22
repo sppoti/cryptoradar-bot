@@ -47,13 +47,13 @@ async def fetch_json(url: str) -> Optional[Any]:
     return None
 
 async def get_ticker_24hr(symbol: str) -> Optional[Dict[str, Any]]:
-    """Получить 24ч статистику по монете (Binance Vision -> Binance -> Bybit)."""
+    """Получить 24ч статистику по монете (Binance Vision -> Binance -> Bybit -> OKX -> KuCoin)."""
     url = f"{BINANCE_API_URL}/ticker/24hr?symbol={symbol.upper()}"
     data = await fetch_json(url)
     if data and isinstance(data, dict) and "lastPrice" in data:
         return data
 
-    # Надежный резервный шлюз: Bybit Spot Ticker (без географических блокировок)
+    # 1. Резервный шлюз: Bybit Spot Ticker (без географических блокировок)
     try:
         bybit_url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol.upper()}"
         async with aiohttp.ClientSession(headers=DEFAULT_HEADERS) as session:
@@ -76,6 +76,64 @@ async def get_ticker_24hr(symbol: str) -> Optional[Dict[str, Any]]:
                             "lowPrice": str(low_p),
                             "quoteVolume": str(vol)
                         }
+    except Exception:
+        pass
+
+    sym_upper = symbol.upper()
+    base = sym_upper[:-4] if sym_upper.endswith("USDT") else sym_upper
+
+    # 2. Высоконадежный резервный шлюз: OKX Spot Ticker (без географических ограничений на Render)
+    try:
+        okx_url = f"https://www.okx.com/api/v5/market/ticker?instId={base}-USDT"
+        async with aiohttp.ClientSession(headers=DEFAULT_HEADERS) as session:
+            async with session.get(okx_url, timeout=aiohttp.ClientTimeout(total=4)) as resp:
+                if resp.status == 200:
+                    oj = await resp.json()
+                    if oj.get("code") == "0":
+                        items = oj.get("data", [])
+                        if items:
+                            item = items[0]
+                            last_p = float(item.get("last", 0) or 0)
+                            high_p = float(item.get("high24h", 0) or last_p)
+                            low_p = float(item.get("low24h", 0) or last_p)
+                            open_p = float(item.get("open24h", 0) or 0)
+                            chg = ((last_p - open_p) / open_p * 100.0) if open_p > 0 else 0.0
+                            vol = float(item.get("volCcy24h", 0) or 0)
+                            return {
+                                "symbol": f"{base}USDT",
+                                "lastPrice": str(last_p),
+                                "priceChangePercent": str(round(chg, 2)),
+                                "highPrice": str(high_p),
+                                "lowPrice": str(low_p),
+                                "quoteVolume": str(vol)
+                            }
+    except Exception:
+        pass
+
+    # 3. Резервный шлюз: KuCoin Spot Ticker
+    try:
+        kucoin_url = f"https://api.kucoin.com/api/v1/market/stats?symbol={base}-USDT"
+        async with aiohttp.ClientSession(headers=DEFAULT_HEADERS) as session:
+            async with session.get(kucoin_url, timeout=aiohttp.ClientTimeout(total=4)) as resp:
+                if resp.status == 200:
+                    kj = await resp.json()
+                    if kj.get("code") == "200000":
+                        kdata = kj.get("data", {})
+                        if kdata:
+                            last_p = float(kdata.get("last", 0) or 0)
+                            high_p = float(kdata.get("high", 0) or last_p)
+                            low_p = float(kdata.get("low", 0) or last_p)
+                            chg_rate = float(kdata.get("changeRate", 0) or 0)
+                            chg = chg_rate * 100.0
+                            vol = float(kdata.get("volValue", 0) or 0)
+                            return {
+                                "symbol": f"{base}USDT",
+                                "lastPrice": str(last_p),
+                                "priceChangePercent": str(round(chg, 2)),
+                                "highPrice": str(high_p),
+                                "lowPrice": str(low_p),
+                                "quoteVolume": str(vol)
+                            }
     except Exception:
         pass
 
@@ -132,6 +190,25 @@ async def calculate_rsi(symbol: str, interval: str = "1h", period: int = 14) -> 
                         if list_candles and len(list_candles) >= period + 1:
                             list_candles.reverse()
                             closes = [float(c[4]) for c in list_candles if len(c) > 4]
+        except Exception:
+            pass
+
+    # OKX fallback
+    if len(closes) < period + 1:
+        try:
+            sym_upper = symbol.upper()
+            base = sym_upper[:-4] if sym_upper.endswith("USDT") else sym_upper
+            bar = "1H" if interval == "1h" else ("4H" if interval == "4h" else "1D")
+            okx_kline_url = f"https://www.okx.com/api/v5/market/candles?instId={base}-USDT&bar={bar}&limit={period + 15}"
+            async with aiohttp.ClientSession(headers=DEFAULT_HEADERS) as session:
+                async with session.get(okx_kline_url, timeout=aiohttp.ClientTimeout(total=4)) as resp:
+                    if resp.status == 200:
+                        oj = await resp.json()
+                        if oj.get("code") == "0":
+                            list_candles = oj.get("data", [])
+                            if list_candles and len(list_candles) >= period + 1:
+                                list_candles = list(reversed(list_candles))
+                                closes = [float(c[4]) for c in list_candles if len(c) > 4]
         except Exception:
             pass
 
