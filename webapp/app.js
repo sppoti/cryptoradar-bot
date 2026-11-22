@@ -411,7 +411,12 @@
       username: initialUsername,
       isVip: initialIsVip,
       subUntil: null,
-      refCount: 0
+      refCount: 0,
+      rank: 0,
+      vipDaysLeft: 0,
+      vipDaysText: '0 дн. (Нет подписки)',
+      regDate: '—',
+      vipLink: null
     },
     activeSymbol: 'BTCUSDT',
     marketData: null,
@@ -471,7 +476,27 @@
     forecastContent: document.getElementById('forecast-content'),
     forecastModalTitle: document.getElementById('forecast-modal-title'),
     forecastModalSubtitle: document.getElementById('forecast-modal-subtitle'),
-    btnDownloadSignalCard: document.getElementById('btn-download-signal-card')
+    btnDownloadSignalCard: document.getElementById('btn-download-signal-card'),
+    // Модальное окно профиля трейдера (Profile Tab / Modal)
+    userPill: document.getElementById('user-pill'),
+    profileModal: document.getElementById('profile-modal'),
+    profileModalBackdrop: document.getElementById('profile-modal-backdrop'),
+    btnCloseProfileModal: document.getElementById('btn-close-profile-modal'),
+    profileAvatar: document.getElementById('profile-avatar'),
+    profileFirstName: document.getElementById('profile-first-name'),
+    profileUsername: document.getElementById('profile-username'),
+    profileUserId: document.getElementById('profile-user-id'),
+    profileVipBadge: document.getElementById('profile-vip-badge'),
+    profileVipDays: document.getElementById('profile-vip-days'),
+    profileSubUntil: document.getElementById('profile-sub-until'),
+    profileRegDate: document.getElementById('profile-reg-date'),
+    profileRefCount: document.getElementById('profile-ref-count'),
+    profileUserRank: document.getElementById('profile-user-rank'),
+    profileRefLink: document.getElementById('profile-ref-link'),
+    btnCopyRefLink: document.getElementById('btn-copy-ref-link'),
+    btnProfileBuyVip: document.getElementById('btn-profile-buy-vip'),
+    btnProfileVipChannel: document.getElementById('btn-profile-vip-channel'),
+    btnProfileDismiss: document.getElementById('btn-profile-dismiss')
   };
 
   // --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOAST) ---
@@ -645,15 +670,22 @@
 
         if (res.ok) {
           const data = await res.json();
-          if (data && data.user) {
-            const isVip = Boolean(data.user.is_vip);
+          if (data && (data.user || data.status === 'success')) {
+            const userData = data.user || data;
+            const isVip = Boolean(userData.is_vip);
             state.user.isVip = isVip || isAdmin || hasVipParam;
             try {
               localStorage.setItem('cr_is_vip', state.user.isVip ? '1' : '0');
             } catch (e) {}
-            state.user.subUntil = data.user.sub_until;
-            state.user.refCount = data.user.referrals_count || 0;
-            if (data.user.first_name) state.user.firstName = data.user.first_name;
+            state.user.subUntil = userData.sub_until || (isAdmin ? 'Бессрочно (Admin)' : null);
+            state.user.refCount = userData.referrals_count || 0;
+            state.user.rank = userData.rank || 0;
+            state.user.vipLink = userData.vip_link || null;
+            state.user.vipDaysLeft = (userData.vip_days_left !== undefined) ? userData.vip_days_left : (data.vip_days_left !== undefined ? data.vip_days_left : (state.user.isVip ? (isAdmin ? 9999 : 30) : 0));
+            state.user.vipDaysText = userData.vip_days_text || data.vip_days_text || (isAdmin ? 'Бессрочно (Admin)' : (state.user.isVip ? '30 дн.' : '0 дн. (Нет подписки)'));
+            state.user.regDate = userData.registration_date || data.registration_date || userData.created_at || data.created_at || '—';
+            if (userData.first_name) state.user.firstName = userData.first_name;
+            if (userData.username) state.user.username = userData.username;
           }
         }
       } catch (e) {
@@ -661,6 +693,7 @@
       }
     }
     updateUserUI();
+    updateProfileUI();
     renderSignals();
   }
 
@@ -679,6 +712,93 @@
         if (el.btnOpenVipHeader) {
           el.btnOpenVipHeader.innerHTML = '<span class="btn-vip-icon">💎</span> <span class="btn-vip-text">VIP доступ</span>';
         }
+      }
+    }
+  }
+
+  function updateProfileUI() {
+    const isAdmin = state.user.id === ADMIN_ID;
+    if (el.profileFirstName) {
+      el.profileFirstName.textContent = state.user.firstName || (isAdmin ? 'Администратор' : 'Трейдер');
+    }
+    if (el.profileUsername) {
+      const uName = state.user.username;
+      el.profileUsername.textContent = uName ? (uName.startsWith('@') ? uName : `@${uName}`) : (isAdmin ? '@sppoti' : '@trader');
+    }
+    if (el.profileUserId) {
+      el.profileUserId.textContent = `ID: ${state.user.id || '—'}`;
+    }
+    if (el.profileVipBadge) {
+      if (state.user.isVip) {
+        el.profileVipBadge.className = 'sub-status-badge badge-vip';
+        el.profileVipBadge.textContent = 'PRO VIP';
+      } else {
+        el.profileVipBadge.className = 'sub-status-badge badge-free';
+        el.profileVipBadge.textContent = 'FREE';
+      }
+    }
+    if (el.profileVipDays) {
+      const daysText = state.user.vipDaysText || (state.user.isVip ? (isAdmin ? 'Бессрочно (Admin)' : '30 дн.') : '0 дн. (Нет подписки)');
+      el.profileVipDays.textContent = daysText;
+      if (state.user.isVip) {
+        el.profileVipDays.classList.add('highlight-vip');
+        el.profileVipDays.classList.remove('highlight-red');
+      } else {
+        el.profileVipDays.classList.remove('highlight-vip');
+        el.profileVipDays.classList.add('highlight-red');
+      }
+    }
+    if (el.profileSubUntil) {
+      el.profileSubUntil.textContent = state.user.subUntil || (isAdmin ? 'Бессрочно (Admin)' : '—');
+    }
+    if (el.profileRegDate) {
+      el.profileRegDate.textContent = state.user.regDate || '—';
+    }
+    if (el.profileRefCount) {
+      el.profileRefCount.textContent = String(state.user.refCount || 0);
+    }
+    if (el.profileUserRank) {
+      el.profileUserRank.textContent = `РАНГ: #${state.user.rank || (isAdmin ? 1 : 0)}`;
+    }
+    if (el.profileRefLink) {
+      const botName = BOT_USERNAME || 'ssddssa_bot';
+      el.profileRefLink.value = `https://t.me/${botName}?start=ref_${state.user.id || 0}`;
+    }
+    if (el.btnProfileVipChannel) {
+      if (state.user.isVip && state.user.vipLink) {
+        el.btnProfileVipChannel.classList.remove('hidden');
+        el.btnProfileVipChannel.href = state.user.vipLink;
+      } else if (state.user.isVip) {
+        el.btnProfileVipChannel.classList.remove('hidden');
+        el.btnProfileVipChannel.href = 'https://t.me/+DKWuBUM_YGZlM2Qy';
+      } else {
+        el.btnProfileVipChannel.classList.add('hidden');
+      }
+    }
+  }
+
+  function openProfileModal() {
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    triggerHaptic('medium');
+    updateProfileUI();
+    if (el.profileModal) {
+      el.profileModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      if (tg?.BackButton) {
+        tg.BackButton.show();
+        tg.BackButton.onClick(closeProfileModal);
+      }
+    }
+  }
+
+  function closeProfileModal() {
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    triggerHaptic('light');
+    if (el.profileModal) {
+      el.profileModal.classList.add('hidden');
+      document.body.style.overflow = '';
+      if (tg?.BackButton) {
+        tg.BackButton.hide();
       }
     }
   }
@@ -1509,6 +1629,44 @@
         window.Telegram.WebApp.openLink(cardUrl);
       } else {
         window.open(cardUrl, '_blank');
+      }
+    });
+  }
+
+  // --- ОБРАБОТЧИКИ МОДАЛЬНОГО ОКНА ПРОФИЛЯ (Task TMA Profile Tab) ---
+  if (el.userPill) {
+    el.userPill.addEventListener('click', openProfileModal);
+  }
+  if (el.btnCloseProfileModal) {
+    el.btnCloseProfileModal.addEventListener('click', closeProfileModal);
+  }
+  if (el.profileModalBackdrop) {
+    el.profileModalBackdrop.addEventListener('click', closeProfileModal);
+  }
+  if (el.btnProfileDismiss) {
+    el.btnProfileDismiss.addEventListener('click', closeProfileModal);
+  }
+  if (el.btnProfileBuyVip) {
+    el.btnProfileBuyVip.addEventListener('click', () => {
+      closeProfileModal();
+      openVipModal();
+    });
+  }
+  if (el.btnCopyRefLink) {
+    el.btnCopyRefLink.addEventListener('click', () => {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+      triggerHaptic('medium');
+      if (el.profileRefLink) {
+        const textToCopy = el.profileRefLink.value;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(textToCopy);
+        } else {
+          el.profileRefLink.select();
+          document.execCommand('copy');
+        }
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+        triggerHaptic('success');
+        showToast('Реферальная ссылка скопирована!');
       }
     });
   }

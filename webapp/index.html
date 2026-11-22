@@ -339,6 +339,85 @@
     </div>
   </div>
 
+  <!-- PROFILE MODAL (TMA Terminal Profile) -->
+  <div id="profile-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+    <div class="modal-backdrop" id="profile-modal-backdrop"></div>
+    <div class="modal-content glass-card-modal profile-modal-box">
+      <button class="modal-close-btn" id="btn-close-profile-modal" type="button" aria-label="Закрыть окно профиля">✕</button>
+      
+      <!-- Profile Header -->
+      <div class="profile-header">
+        <div class="profile-avatar-wrap">
+          <span class="profile-avatar" id="profile-avatar">👤</span>
+        </div>
+        <div class="profile-user-info">
+          <div class="profile-name-row">
+            <span class="profile-first-name" id="profile-first-name">Трейдер</span>
+            <span class="profile-username" id="profile-username">@trader</span>
+          </div>
+          <div class="profile-id-row">
+            <span class="profile-id-badge" id="profile-user-id">ID: 0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIP Status Card -->
+      <div class="profile-card profile-vip-card">
+        <div class="profile-card-header">
+          <span class="profile-card-title">СТАТУС ПОДПИСКИ</span>
+          <span class="sub-status-badge badge-free" id="profile-vip-badge">FREE</span>
+        </div>
+        <div class="profile-metrics-list">
+          <div class="profile-metric-row">
+            <span class="profile-metric-label">Осталось VIP:</span>
+            <span class="profile-metric-value highlight-red" id="profile-vip-days">0 дн. (Нет подписки)</span>
+          </div>
+          <div class="profile-metric-row">
+            <span class="profile-metric-label">Истекает:</span>
+            <span class="profile-metric-value" id="profile-sub-until">—</span>
+          </div>
+          <div class="profile-metric-row">
+            <span class="profile-metric-label">Момент регистрации:</span>
+            <span class="profile-metric-value" id="profile-reg-date">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Referral / Affiliate Card -->
+      <div class="profile-card profile-ref-card">
+        <div class="profile-card-header">
+          <span class="profile-card-title">ПАРТНЕРСКАЯ ПРОГРАММА</span>
+          <span class="profile-rank-badge" id="profile-user-rank">РАНГ: #0</span>
+        </div>
+        <div class="profile-metrics-list">
+          <div class="profile-metric-row">
+            <span class="profile-metric-label">Приглашено рефералов:</span>
+            <span class="profile-metric-value" id="profile-ref-count">0</span>
+          </div>
+        </div>
+        <div class="profile-ref-box">
+          <input type="text" id="profile-ref-link" class="profile-ref-input" readonly value="https://t.me/ssddssa_bot?start=ref_0" aria-label="Реферальная ссылка">
+          <button id="btn-copy-ref-link" class="btn-copy-ref" type="button" title="Скопировать ссылку">
+            <span>📋 Копировать</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="profile-actions-stack">
+        <button id="btn-profile-buy-vip" class="btn-primary-action btn-profile-vip" type="button">
+          ⭐ Оформить / Продлить VIP
+        </button>
+        <a id="btn-profile-vip-channel" class="btn-vip-channel hidden" href="#" target="_blank" rel="noopener noreferrer">
+          🔐 Перейти в VIP-канал
+        </a>
+        <button id="btn-profile-dismiss" class="btn-secondary-action btn-profile-dismiss" type="button">
+          ✕ Закрыть
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATION -->
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 

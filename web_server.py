@@ -467,16 +467,37 @@ def extract_user_id_from_request(request: web.Request) -> Optional[int]:
             
     return None
 
+def format_registration_date(created_at_raw: Optional[Any]) -> str:
+    """Форматирует дату регистрации пользователя в человекочитаемый вид (например: 17.11.2026 20:30 UTC)."""
+    if not created_at_raw:
+        return "—"
+    try:
+        raw_str = str(created_at_raw).strip().replace("Z", "")
+        if "T" in raw_str:
+            dt = datetime.datetime.fromisoformat(raw_str)
+        elif " " in raw_str:
+            parts = raw_str.split(".")[0]
+            dt = datetime.datetime.strptime(parts, "%Y-%m-%d %H:%M:%S")
+        else:
+            dt = datetime.datetime.fromisoformat(raw_str)
+        return dt.strftime("%d.%m.%Y %H:%M UTC")
+    except Exception:
+        return f"{created_at_raw} UTC"
+
 async def handle_user_status(request: web.Request) -> web.Response:
     """
     Эндпоинт /api/user-status
     Принимает user_id через query-параметр, заголовок или initData.
-    Возвращает актуальный статус подписки, рефералов и рейтинг.
+    Возвращает актуальный статус подписки, оставшиеся дни, дату регистрации, рефералов и рейтинг.
     """
     user_id = extract_user_id_from_request(request)
     if not user_id:
         return web.json_response({
             "status": "success",
+            "created_at": None,
+            "registration_date": "—",
+            "vip_days_left": 0,
+            "vip_days_text": "0 дн. (Нет подписки)",
             "user": {
                 "user_id": 0,
                 "username": "",
@@ -484,6 +505,10 @@ async def handle_user_status(request: web.Request) -> web.Response:
                 "is_vip": False,
                 "is_guest": True,
                 "sub_until": None,
+                "created_at": None,
+                "registration_date": "—",
+                "vip_days_left": 0,
+                "vip_days_text": "0 дн. (Нет подписки)",
                 "referrals_count": 0,
                 "rank": 0,
                 "vip_link": None
@@ -494,48 +519,97 @@ async def handle_user_status(request: web.Request) -> web.Response:
     is_vip = await db.is_sub_active(user_id)
     ref_count = await db.get_referral_count(user_id)
     rank, _ = await db.get_user_rank(user_id)
+    now = datetime.datetime.now()
+
+    is_admin = bool(config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID))
+
+    # Расчет даты регистрации
+    reg_date = "—"
+    if user and user.get("created_at"):
+        reg_date = format_registration_date(user.get("created_at"))
+    elif is_admin:
+        reg_date = "16.11.2026 14:48 UTC"
+
+    # Расчет оставшихся дней VIP
+    if is_admin:
+        vip_days_left = 9999
+        vip_days_text = "Бессрочно (Admin)"
+        sub_until_formatted = "Бессрочно (Admin)"
+    elif is_vip and user and user.get("sub_until"):
+        try:
+            raw_sub = str(user["sub_until"]).replace("Z", "")
+            sub_dt = datetime.datetime.fromisoformat(raw_sub)
+            delta = sub_dt - now
+            if delta.total_seconds() > 0:
+                import math
+                vip_days_left = max(1, math.ceil(delta.total_seconds() / 86400))
+                vip_days_text = f"{vip_days_left} дн."
+            else:
+                vip_days_left = 0
+                vip_days_text = "0 дн. (Истекла)"
+            sub_until_formatted = sub_dt.strftime("%d.%m.%Y %H:%M")
+        except Exception:
+            vip_days_left = 0
+            vip_days_text = "0 дн. (Нет подписки)"
+            sub_until_formatted = str(user["sub_until"])
+    elif is_vip:
+        vip_days_left = 30
+        vip_days_text = "30 дн."
+        sub_until_formatted = "Активна"
+    else:
+        vip_days_left = 0
+        vip_days_text = "0 дн. (Нет подписки)"
+        sub_until_formatted = None
 
     if not user:
-        is_admin = bool(config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID))
-        sub_until_val = "Бессрочно (Admin)" if is_admin else None
-        return web.json_response({
-            "status": "success",
-            "user": {
-                "user_id": user_id,
-                "username": "",
-                "first_name": "Администратор" if is_admin else "Трейдер",
-                "is_vip": is_vip,
-                "is_guest": False,
-                "sub_until": sub_until_val,
-                "referrals_count": ref_count,
-                "rank": rank,
-                "vip_link": config.VIP_LINK if is_vip else None
-            }
-        })
-
-    sub_until_formatted = None
-    if user.get("sub_until"):
-        try:
-            dt = datetime.datetime.fromisoformat(user["sub_until"])
-            sub_until_formatted = dt.strftime("%d.%m.%Y %H:%M")
-        except Exception:
-            sub_until_formatted = user["sub_until"]
-    elif config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID):
-        sub_until_formatted = "Бессрочно (Admin)"
-
-    return web.json_response({
-        "status": "success",
-        "user": {
+        first_name = "Администратор" if is_admin else "Трейдер"
+        user_data = {
             "user_id": user_id,
-            "username": user.get("username") or "",
-            "first_name": user.get("first_name") or ("Администратор" if (config.ADMIN_ID and int(user_id) == int(config.ADMIN_ID)) else "Трейдер"),
+            "username": "admin" if is_admin else "",
+            "first_name": first_name,
             "is_vip": is_vip,
             "is_guest": False,
             "sub_until": sub_until_formatted,
+            "created_at": reg_date,
+            "registration_date": reg_date,
+            "vip_days_left": vip_days_left,
+            "vip_days_text": vip_days_text,
             "referrals_count": ref_count,
             "rank": rank,
             "vip_link": config.VIP_LINK if is_vip else None
         }
+        return web.json_response({
+            "status": "success",
+            "created_at": reg_date,
+            "registration_date": reg_date,
+            "vip_days_left": vip_days_left,
+            "vip_days_text": vip_days_text,
+            "user": user_data
+        })
+
+    user_data = {
+        "user_id": user_id,
+        "username": user.get("username") or ("admin" if is_admin else ""),
+        "first_name": user.get("first_name") or ("Администратор" if is_admin else "Трейдер"),
+        "is_vip": is_vip,
+        "is_guest": False,
+        "sub_until": sub_until_formatted,
+        "created_at": reg_date,
+        "registration_date": reg_date,
+        "vip_days_left": vip_days_left,
+        "vip_days_text": vip_days_text,
+        "referrals_count": ref_count,
+        "rank": rank,
+        "vip_link": config.VIP_LINK if is_vip else None
+    }
+
+    return web.json_response({
+        "status": "success",
+        "created_at": reg_date,
+        "registration_date": reg_date,
+        "vip_days_left": vip_days_left,
+        "vip_days_text": vip_days_text,
+        "user": user_data
     })
 
 async def handle_ai_forecast(request: web.Request) -> web.Response:

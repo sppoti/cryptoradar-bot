@@ -1,10 +1,10 @@
 {
-  "last_synced_at": "2026-11-22 19:19:24 UTC",
+  "last_synced_at": "2026-11-22 19:40:26 UTC",
   "page_id": "41086ecf3dff80e28640e5a0071f5453",
   "status": "synced_local",
   "metrics": {
-    "total_users": 6,
-    "active_subs": 4,
+    "total_users": 9,
+    "active_subs": 6,
     "stars_revenue": 0,
     "rub_revenue": 0,
     "revenue_24h_stars": 0,
@@ -18,7 +18,7 @@
     "conversion_rate": 66.67,
     "revenue_24h_usd": 0.0,
     "total_estimated_usd": 0.0,
-    "timestamp_utc": "2026-11-22 19:19:24 UTC"
+    "timestamp_utc": "2026-11-22 19:40:26 UTC"
   },
   "command_center_url": "https://app.notion.com/p/41086ecf3dff80e28640e5a0071f5453"
 }

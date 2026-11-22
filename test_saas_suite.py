@@ -232,6 +232,9 @@ class TestWebServerAndAPIEndpoints(BaseSaaSTestCase):
         self.assertIn("CryptoRadar PRO", html_text)
         self.assertIn("telegram-web-app.js", html_text)
         self.assertIn("tv_chart_container", html_text)
+        self.assertIn("profile-modal", html_text)
+        self.assertIn("profile-vip-days", html_text)
+        self.assertIn("profile-reg-date", html_text)
 
         # GET /style.css
         resp_css = await self.client.get("/style.css")
@@ -314,18 +317,21 @@ class TestWebServerAndAPIEndpoints(BaseSaaSTestCase):
         self.assertTrue(pay_info.get("rub_enabled"))
 
     async def test_user_status_sunny_and_rainy(self):
-        """Sunny & Rainy: проверка /api/user-status для гостей, зарегистрированных и VIP."""
+        """Sunny & Rainy: проверка /api/user-status для гостей, зарегистрированных, VIP и админа."""
         # 1. Rainy: Запрос без user_id -> Гость
         resp_guest = await self.client.get("/api/user-status")
         self.assertEqual(resp_guest.status, 200)
         guest_data = await resp_guest.json()
         self.assertTrue(guest_data["user"]["is_guest"])
         self.assertFalse(guest_data["user"]["is_vip"])
+        self.assertEqual(guest_data["vip_days_left"], 0)
+        self.assertEqual(guest_data["registration_date"], "—")
 
         # 2. Rainy: Некорректный строковый user_id -> Гость
         resp_bad_id = await self.client.get("/api/user-status?user_id=not_a_number")
         bad_id_data = await resp_bad_id.json()
         self.assertTrue(bad_id_data["user"]["is_guest"])
+        self.assertEqual(bad_id_data["vip_days_left"], 0)
 
         # 3. Sunny: Зарегистрированный обычный пользователь
         await db.get_or_create_user(777111, "trader_joe", "Joe")
@@ -335,6 +341,9 @@ class TestWebServerAndAPIEndpoints(BaseSaaSTestCase):
         self.assertEqual(user_data["user"]["user_id"], 777111)
         self.assertFalse(user_data["user"]["is_vip"])
         self.assertIsNone(user_data["user"]["vip_link"])
+        self.assertEqual(user_data["user"]["vip_days_left"], 0)
+        self.assertEqual(user_data["user"]["vip_days_text"], "0 дн. (Нет подписки)")
+        self.assertIn("UTC", user_data["user"]["registration_date"])
 
         # 4. Sunny: VIP пользователь с активной подпиской
         await db.add_subscription_days(777111, 30)
@@ -343,6 +352,19 @@ class TestWebServerAndAPIEndpoints(BaseSaaSTestCase):
         self.assertTrue(vip_data["user"]["is_vip"])
         self.assertIsNotNone(vip_data["user"]["sub_until"])
         self.assertIsNotNone(vip_data["user"]["vip_link"])
+        self.assertGreaterEqual(vip_data["user"]["vip_days_left"], 29)
+        self.assertIn("дн.", vip_data["user"]["vip_days_text"])
+
+        # 5. Sunny: Администратор (config.ADMIN_ID = 1639805642)
+        admin_id = config.ADMIN_ID or 1639805642
+        resp_admin = await self.client.get(f"/api/user-status?user_id={admin_id}")
+        self.assertEqual(resp_admin.status, 200)
+        admin_data = await resp_admin.json()
+        self.assertTrue(admin_data["user"]["is_vip"])
+        self.assertEqual(admin_data["user"]["vip_days_text"], "Бессрочно (Admin)")
+        self.assertGreater(admin_data["user"]["vip_days_left"], 1000)
+        self.assertIsNotNone(admin_data["user"]["registration_date"])
+        self.assertIsNotNone(admin_data["registration_date"])
 
     async def test_ai_forecast_endpoint_sunny_and_rainy(self):
         """Sunny & Rainy: проверка /api/ai-forecast через GET и POST, валидация ошибок."""
