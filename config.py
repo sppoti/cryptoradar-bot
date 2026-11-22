@@ -71,3 +71,11 @@ MANUAL_PAYMENT_DETAILS = os.getenv(
 WEBAPP_URL = os.getenv("WEBAPP_URL", "http://127.0.0.1:8080").strip()
 WEB_HOST = os.getenv("WEB_HOST", "0.0.0.0").strip()
 WEB_PORT = int(os.getenv("PORT", os.getenv("WEB_PORT", "8080")))
+
+# Canva Cloud Integration (CryptoRadar Pro SaaS)
+CANVA_FOLDER_ID = os.getenv("CANVA_FOLDER_ID", "FAHbqTG9Vg4")
+CANVA_FOLDER_NAME = os.getenv("CANVA_FOLDER_NAME", "CryptoRadar Pro SaaS")
+CANVA_FOLDER_URL = os.getenv("CANVA_FOLDER_URL", "https://www.canva.com/folder/FAHbqTG9Vg4")
+CANVA_TEAM_ID = os.getenv("CANVA_TEAM_ID", "oBZaQa2FDEXm2wgikuzXZ8")
+CANVA_ACCOUNT_NAME = os.getenv("CANVA_ACCOUNT_NAME", "KIIIER")
+

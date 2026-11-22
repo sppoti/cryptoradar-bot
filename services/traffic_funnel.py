@@ -186,3 +186,28 @@ async def generate_branded_teaser_reel(
         output_filename=output_filename
     )
     return reel_path
+
+def get_partner_canva_promos(partner_code: str = "", bot_username: str = "@cryptoradar_live_bot") -> List[Dict[str, Any]]:
+    """
+    Генерирует готовые брифы и спецификации промо-баннеров Canva для партнерского маркетинга.
+    """
+    from services.canva_service import canva_service
+    templates = canva_service.get_available_templates(category="partner")
+    promos = []
+    for t in templates:
+        brief = canva_service.generate_promo_banner_brief(
+            template_id=t["id"],
+            partner_code=partner_code,
+            bot_username=bot_username
+        )
+        promos.append({
+            "template_id": t["id"],
+            "title": t["name"],
+            "format": t["format"],
+            "brief": brief["brief"],
+            "canva_folder_id": brief["canva_folder_id"],
+            "folder_url": brief["data"]["folder_url"],
+            "mcp_payload": canva_service.export_canva_mcp_payload(brief)
+        })
+    return promos
+
