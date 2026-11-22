@@ -12,3 +12,5 @@ test_*.db
 bot_database.db
 .omo/
 .gemini/
+static/canva_renders/
+

@@ -17,8 +17,10 @@ import asyncio
 import os
 import sys
 import time
+import json
 import unittest
 from unittest.mock import AsyncMock, patch
+
 
 import aiosqlite
 from aiohttp.test_utils import TestClient, TestServer
@@ -32,6 +34,8 @@ import generate_reel
 from handlers import admin, payments, user, vip_services
 import keyboards as kb
 from services import affiliate, ai_analytics, scanner, traffic_funnel
+import services.notion_sync as notion_sync
+
 import web_server
 
 TEST_DB_PATH = "test_saas_suite_database.db"
@@ -384,6 +388,55 @@ class TestWebServerAndAPIEndpoints(BaseSaaSTestCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(resp.headers.get("Access-Control-Allow-Origin"), "*")
         self.assertIn("GET", resp.headers.get("Access-Control-Allow-Methods", ""))
+
+    async def test_notion_api_endpoints(self):
+        """Проверка REST API эндпоинтов телеметрии Notion Command Center."""
+        resp_metrics = await self.client.get("/api/notion/metrics")
+        self.assertEqual(resp_metrics.status, 200)
+        data = await resp_metrics.json()
+        self.assertEqual(data["status"], "success")
+        self.assertIn("metrics", data)
+        self.assertIn("command_center_url", data)
+
+        resp_sync = await self.client.post("/api/notion/sync")
+        self.assertEqual(resp_sync.status, 200)
+        sync_data = await resp_sync.json()
+        self.assertTrue(sync_data["success"])
+        self.assertIn("markdown_block", sync_data)
+
+    async def test_signal_card_endpoint_sunny_and_rainy(self):
+        """Sunny & Rainy: проверка /api/signal-card (Task 12) - PNG рендеринг, кеш и JSON."""
+        # 1. Rainy: missing symbol
+        resp_missing = await self.client.get("/api/signal-card")
+        self.assertEqual(resp_missing.status, 400)
+        err_json = await resp_missing.json()
+        self.assertEqual(err_json["status"], "error")
+
+        # 2. Rainy: invalid symbol
+        resp_invalid = await self.client.get("/api/signal-card?symbol=@@INVALID@@")
+        self.assertEqual(resp_invalid.status, 400)
+        err_invalid = await resp_invalid.json()
+        self.assertEqual(err_invalid["status"], "error")
+
+        # 3. Sunny: direct PNG image response
+        resp_png = await self.client.get("/api/signal-card?symbol=BTC")
+        self.assertEqual(resp_png.status, 200)
+        self.assertIn("image/png", resp_png.headers.get("Content-Type", ""))
+        self.assertIn("max-age=60", resp_png.headers.get("Cache-Control", ""))
+        png_bytes = await resp_png.read()
+        self.assertGreater(len(png_bytes), 10000)
+
+        # 4. Sunny: JSON format with base64 image
+        resp_json = await self.client.get("/api/signal-card?symbol=BTC&format=json")
+        self.assertEqual(resp_json.status, 200)
+        card_data = await resp_json.json()
+        self.assertEqual(card_data["status"], "success")
+        self.assertEqual(card_data["symbol"], "BTCUSDT")
+        self.assertIn("image_base64", card_data)
+        self.assertTrue(card_data["image_base64"].startswith("data:image/png;base64,"))
+        self.assertIn("price", card_data)
+        self.assertIn("probability", card_data)
+
 
 
 # ==============================================================================
@@ -905,6 +958,107 @@ class TestEndToEndSaaSLifecycle(BaseSaaSTestCase):
         self.assertIsNotNone(payout_rec["processed_at"])
 
 
+class TestNotionCommandCenterSync(BaseSaaSTestCase):
+    """Тестирование модуля синхронизации аналитики SaaS с Notion Command Center."""
+
+    async def test_live_metrics_extraction(self):
+        # 1. Создаем тестовых пользователей
+        u1 = await db.get_or_create_user(1001, "trader_alice", "Alice")
+        u2 = await db.get_or_create_user(1002, "trader_bob", "Bob")
+        u3 = await db.get_or_create_user(1003, "trader_charlie", "Charlie")
+
+        # Назначаем VIP подписку u1 и u2
+        await db.add_subscription_days(1001, 30)
+        await db.add_subscription_days(1002, 30)
+
+        # 2. Создаем платежи
+        await db.record_payment(1001, "sub_1m", 150, "XTR", "approved")
+        await db.record_payment(1002, "sub_3m", 1200, "RUB", "approved")
+
+        # 3. Регистрируем B2B партнера
+        p = await db.register_or_get_partner(2001, "whale_channel", "Crypto Whale Alert", "@whale_alert", 0.30)
+        await db.record_affiliate_earning(2001, 1001, 1, "sub_1m", 150, 45, "XTR")
+        await db.record_affiliate_earning(2001, 1002, 2, "sub_3m", 1200, 360, "RUB")
+
+        # 4. Создаем заявку на выплату
+        ok_p, _, _ = await db.create_payout_request(2001, 45, "XTR", "TON: EQ...")
+        self.assertTrue(ok_p)
+
+        # 5. Извлекаем метрики
+        metrics = await notion_sync.fetch_platform_metrics(TEST_DB_PATH)
+
+        expected_admin = 1 if config.ADMIN_ID else 0
+        self.assertEqual(metrics["total_users"], 3 + expected_admin)
+        self.assertEqual(metrics["active_subs"], 2 + expected_admin)
+        self.assertEqual(metrics["stars_revenue"], 150)
+        self.assertEqual(metrics["rub_revenue"], 1200)
+        self.assertEqual(metrics["revenue_24h_stars"], 150)
+        self.assertEqual(metrics["revenue_24h_rub"], 1200)
+        self.assertEqual(metrics["total_partners"], 1)
+        self.assertEqual(metrics["affiliate_stars"], 45)
+        self.assertEqual(metrics["affiliate_rub"], 360)
+        self.assertEqual(metrics["pending_payout_count"], 1)
+        self.assertEqual(metrics["pending_payout_stars"], 45)
+
+    def test_notion_markdown_and_blocks_format(self):
+        sample_metrics = {
+            "total_users": 100,
+            "active_subs": 25,
+            "stars_revenue": 5000,
+            "rub_revenue": 30000,
+            "revenue_24h_stars": 350,
+            "revenue_24h_rub": 2500,
+            "total_partners": 5,
+            "affiliate_stars": 1500,
+            "affiliate_rub": 9000,
+            "pending_payout_count": 2,
+            "conversion_rate": 25.0,
+            "revenue_24h_usd": 34.78,
+            "total_estimated_usd": 433.33,
+            "timestamp_utc": "2026-11-22 18:00:00 UTC",
+        }
+
+        # Тест Markdown Callout
+        md = notion_sync.format_notion_callout_markdown(sample_metrics)
+        self.assertIn('<callout icon="⚡" color="green_bg">', md)
+        self.assertIn("100 traders", md)
+        self.assertIn("25 subscribers", md)
+        self.assertIn("5000 ⭐ / 30000 ₽", md)
+        self.assertIn("services.notion_sync", md)
+
+        # Тест REST API блоков
+        blocks = notion_sync.format_notion_blocks_json(sample_metrics)
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0]["type"], "callout")
+        self.assertEqual(blocks[0]["callout"]["icon"]["emoji"], "⚡")
+
+    async def test_notion_sync_service_cycle(self):
+        from pathlib import Path
+        temp_state_file = Path("test_notion_sync_state.json")
+        if temp_state_file.exists():
+            temp_state_file.unlink()
+
+        try:
+            service = notion_sync.NotionSyncService(
+                page_id="41086ecf3dff80e28640e5a0071f5453",
+                db_path=TEST_DB_PATH,
+                state_file=temp_state_file,
+            )
+            result = await service.sync()
+            self.assertTrue(result["success"])
+            self.assertEqual(result["page_id"], "41086ecf3dff80e28640e5a0071f5453")
+            self.assertTrue(temp_state_file.exists())
+
+            # Проверяем содержимое закешированного состояния
+            with open(temp_state_file, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            self.assertEqual(saved["status"], "synced_local")
+            self.assertIn("metrics", saved)
+        finally:
+            if temp_state_file.exists():
+                temp_state_file.unlink()
+
+
 # ==============================================================================
 # CLI RUNNER & PRETTY OUTPUT
 # ==============================================================================
@@ -927,7 +1081,9 @@ def run_unified_saas_test_suite():
         TestTrafficFunnelGenerators,
         TestTelegramBotUIAndRouters,
         TestEndToEndSaaSLifecycle,
+        TestNotionCommandCenterSync,
     ]
+
 
     for s in suites_to_load:
         suite.addTests(loader.loadTestsFromTestCase(s))

@@ -1,14 +1,15 @@
 import asyncio
 import html
 import logging
+import os
 from typing import Dict, Any, List, Optional
 import aiohttp
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 
 import config
 import database as db
-from services import scanner, ai_analytics
+from services import scanner, ai_analytics, canva_service
 
 logger = logging.getLogger("VIPAutopilot")
 
@@ -408,13 +409,32 @@ async def publish_vip_trade_setup(bot: Bot, symbol: Optional[str] = None) -> boo
             ]
         ])
 
-        await bot.send_message(
-            chat_id=channel_id,
-            text=post_text,
-            parse_mode="HTML",
-            reply_markup=keyboard
-        )
-        logger.info(f"Успешно опубликован VIP Trade Setup (#{coin_ticker}) в закрытый канал {channel_id}")
+        # Визуальная генерация сигнальной карточки через Canva Engine
+        sent_as_photo = False
+        try:
+            card_path = canva_service.render_local_signal_card(best_data)
+            if card_path and os.path.exists(card_path):
+                photo = FSInputFile(card_path)
+                await bot.send_photo(
+                    chat_id=channel_id,
+                    photo=photo,
+                    caption=post_text,
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+                sent_as_photo = True
+                logger.info(f"Успешно опубликована фото-карточка VIP Trade Setup (#{coin_ticker}) в закрытый канал {channel_id}")
+        except Exception as img_err:
+            logger.warning(f"Не удалось отправить фото карточки сигнала ({img_err}). Фоллбэк на текстовое сообщение.")
+
+        if not sent_as_photo:
+            await bot.send_message(
+                chat_id=channel_id,
+                text=post_text,
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+            logger.info(f"Успешно опубликован текстовый VIP Trade Setup (#{coin_ticker}) в закрытый канал {channel_id}")
         return True
     except Exception as e:
         logger.error(f"Ошибка публикации VIP Trade Setup: {e}")

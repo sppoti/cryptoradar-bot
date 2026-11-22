@@ -187,16 +187,17 @@
     }
   }
 
-  // Тактильная отдача (Telegram Haptic Feedback)
+  // Тактильная отдача (Telegram WebApp Haptic Feedback API)
   function triggerHaptic(style = 'light') {
     try {
-      if (!tg?.HapticFeedback) return;
+      const haptic = window.Telegram?.WebApp?.HapticFeedback || tg?.HapticFeedback;
+      if (!haptic) return;
       if (style === 'success' || style === 'warning' || style === 'error') {
-        tg.HapticFeedback.notificationOccurred(style);
+        haptic.notificationOccurred(style);
       } else if (style === 'selection') {
-        tg.HapticFeedback.selectionChanged();
+        haptic.selectionChanged();
       } else {
-        tg.HapticFeedback.impactOccurred(style);
+        haptic.impactOccurred(style);
       }
     } catch (e) {
       // Игнорируем в браузере вне Telegram
@@ -461,7 +462,16 @@
     tariffsContainer: document.getElementById('tariffs-container'),
     btnPayStars: document.getElementById('btn-pay-stars'),
     starsBtnText: document.getElementById('stars-btn-text'),
-    toast: document.getElementById('toast')
+    toast: document.getElementById('toast'),
+    // Модальное окно AI-прогноза и карточки сигнала (Task 12)
+    forecastModal: document.getElementById('forecast-modal'),
+    forecastModalBackdrop: document.getElementById('forecast-modal-backdrop'),
+    btnCloseForecastModal: document.getElementById('btn-close-forecast-modal'),
+    btnOpenForecast: document.getElementById('btn-open-forecast'),
+    forecastContent: document.getElementById('forecast-content'),
+    forecastModalTitle: document.getElementById('forecast-modal-title'),
+    forecastModalSubtitle: document.getElementById('forecast-modal-subtitle'),
+    btnDownloadSignalCard: document.getElementById('btn-download-signal-card')
   };
 
   // --- ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ (TOAST) ---
@@ -480,6 +490,8 @@
   function copyToClipboard(text, successMessage) {
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(() => {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+        triggerHaptic('success');
         showToast(successMessage);
       }).catch(() => {
         fallbackCopyText(text, successMessage);
@@ -500,6 +512,8 @@
       textArea.select();
       document.execCommand('copy');
       document.body.removeChild(textArea);
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+      triggerHaptic('success');
       showToast(successMessage);
     } catch (err) {
       showToast(`Скопировано: ${text}`);
@@ -905,6 +919,7 @@
       `;
 
       const selectCoin = () => {
+        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
         triggerHaptic('light');
         renderTradingViewChart(t.symbol);
         document.querySelectorAll('.market-card').forEach(c => c.classList.remove('active'));
@@ -1022,6 +1037,7 @@
 
       tr.querySelector('.btn-chart-jump').addEventListener('click', (e) => {
         e.stopPropagation();
+        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
         triggerHaptic('medium');
         renderTradingViewChart(t.symbol);
         const chartBox = document.querySelector('.chart-section');
@@ -1029,6 +1045,7 @@
       });
 
       tr.addEventListener('click', () => {
+        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
         triggerHaptic('light');
         renderTradingViewChart(t.symbol);
       });
@@ -1265,9 +1282,10 @@
 
   // --- ОБРАБОТЧИКИ СОБЫТИЙ И КНОПОК ОПЛАТЫ ---
 
-  // Фильтры сигналов
+  // Фильтры сигналов (Переключение вкладок с легкой тактильной отдачей)
   el.filterTabs.forEach(tab => {
     tab.addEventListener('click', () => {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
       triggerHaptic('light');
       el.filterTabs.forEach(t => {
         t.classList.remove('active');
@@ -1280,10 +1298,11 @@
     });
   });
 
-  // Быстрый выбор монет для графика
+  // Быстрый выбор монет для графика (Выбор монеты с легкой тактильной отдачей)
   el.symbolPills.forEach(pill => {
     pill.addEventListener('click', () => {
-      triggerHaptic('medium');
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+      triggerHaptic('light');
       const sym = pill.dataset.symbol;
       renderTradingViewChart(sym);
       if (state.marketData?.tickers) {
@@ -1312,6 +1331,7 @@
   // Очистка поиска
   if (el.btnClearSearch) {
     el.btnClearSearch.addEventListener('click', () => {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
       triggerHaptic('light');
       if (el.scannerSearch) {
         el.scannerSearch.value = '';
@@ -1325,12 +1345,15 @@
     });
   }
 
-  // Кнопка обновления рынка
+  // Кнопка обновления рынка (ручное обновление с подтверждающим haptic success)
   if (el.btnRefreshMarket) {
     el.btnRefreshMarket.addEventListener('click', async () => {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
       triggerHaptic('medium');
       el.btnRefreshMarket.classList.add('spinning');
       await Promise.all([fetchMarketOverview(), fetchSignals()]);
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+      triggerHaptic('success');
       showToast('Котировки Binance обновлены');
       setTimeout(() => el.btnRefreshMarket.classList.remove('spinning'), 600);
     });
@@ -1345,6 +1368,149 @@
   }
   if (el.modalBackdrop) {
     el.modalBackdrop.addEventListener('click', closeVipModal);
+  }
+
+  // --- AI FORECAST MODAL & SIGNAL CARD GENERATOR (Task 12) ---
+  let activeForecastSymbol = 'BTC';
+
+  async function openForecastModal(symbol) {
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    triggerHaptic('medium');
+    const sym = symbol || state.activeSymbol || 'BTCUSDT';
+    const cleanTicker = sym.replace('USDT', '');
+    activeForecastSymbol = cleanTicker;
+
+    if (el.forecastModal) {
+      el.forecastModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      if (el.forecastModalTitle) {
+        el.forecastModalTitle.textContent = `AI-прогноз ${cleanTicker}/USDT`;
+      }
+      if (el.forecastModalSubtitle) {
+        el.forecastModalSubtitle.textContent = 'Комплексный квантовый скоринг и расчетные уровни';
+      }
+      if (el.forecastContent) {
+        el.forecastContent.innerHTML = `
+          <div class="forecast-loading" style="text-align: center; padding: 30px 10px;">
+            <p style="color: var(--text-secondary); font-size: 13px;">⚡ Анализ стакана, RSI и институциональной ликвидности для ${cleanTicker}...</p>
+          </div>
+        `;
+      }
+    }
+
+    try {
+      const res = await fetch(`${API_BASE || ''}/api/ai-forecast?symbol=${encodeURIComponent(cleanTicker)}`, { cache: 'no-store' });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      renderForecastData(data);
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+      triggerHaptic('success');
+    } catch (err) {
+      console.warn('Forecast load error:', err);
+      if (el.forecastContent) {
+        el.forecastContent.innerHTML = `
+          <div style="text-align: center; padding: 20px; color: #FF3366;">
+            <p style="font-weight: 700;">Не удалось загрузить прогноз</p>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">Сервер временно недоступен или не удалось получить котировки биржи.</p>
+          </div>
+        `;
+      }
+    }
+  }
+
+  function renderForecastData(data) {
+    if (!el.forecastContent) return;
+    const ticker = data.ticker || activeForecastSymbol || 'BTC';
+    const biasBadge = data.bias_badge || data.bias || 'Neutral';
+    const prob = data.probability || 85;
+    const priceStr = data.price_formatted || (data.price ? `$${data.price}` : '—');
+    const rr = data.risk_reward || '1:2.5';
+    const entryZone = data.entry_zone || 'По рынку';
+    const tp1 = data.tp1 || '—';
+    const tp2 = data.tp2 || '—';
+    const sl = data.stop_loss || '—';
+    const summary = data.summary || 'Нейтральная динамика, рекомендуется соблюдать риск-менеджмент.';
+    const ind = data.indicators || {};
+    const rsi1h = ind.rsi_1h ? Number(ind.rsi_1h).toFixed(1) : '—';
+    const rsi4h = ind.rsi_4h ? Number(ind.rsi_4h).toFixed(1) : '—';
+
+    el.forecastContent.innerHTML = `
+      <div class="forecast-bias-banner">
+        <div>
+          <span class="forecast-bias-title">${biasBadge}</span>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Текущая цена: <strong>${priceStr}</strong></div>
+        </div>
+        <div style="text-align: right;">
+          <span class="forecast-prob-badge">${prob}% точность</span>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">R:R ${rr}</div>
+        </div>
+      </div>
+
+      <div class="forecast-levels-grid">
+        <div class="forecast-level-item full-width">
+          <span class="forecast-level-label">Зона оптимального входа:</span>
+          <span class="forecast-level-val">${entryZone}</span>
+        </div>
+        <div class="forecast-level-item">
+          <span class="forecast-level-label">Тейк-профит 1:</span>
+          <span class="forecast-level-val tp">${tp1}</span>
+        </div>
+        <div class="forecast-level-item">
+          <span class="forecast-level-label">Тейк-профит 2:</span>
+          <span class="forecast-level-val tp">${tp2}</span>
+        </div>
+        <div class="forecast-level-item full-width">
+          <span class="forecast-level-label">Стоп-лосс (инвалидация):</span>
+          <span class="forecast-level-val sl">${sl}</span>
+        </div>
+      </div>
+
+      <div class="forecast-summary-box">
+        <strong>Квантовый анализ:</strong> ${summary}
+        <div style="margin-top: 6px; font-size: 11px; color: var(--text-secondary);">
+          RSI 1H: <strong>${rsi1h}</strong> | RSI 4H: <strong>${rsi4h}</strong>
+        </div>
+      </div>
+    `;
+  }
+
+  function closeForecastModal() {
+    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light');
+    triggerHaptic('light');
+    if (el.forecastModal) {
+      el.forecastModal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+  }
+
+  if (el.btnOpenForecast) {
+    el.btnOpenForecast.addEventListener('click', () => {
+      openForecastModal(state.activeSymbol);
+    });
+  }
+  if (el.btnCloseForecastModal) {
+    el.btnCloseForecastModal.addEventListener('click', closeForecastModal);
+  }
+  if (el.forecastModalBackdrop) {
+    el.forecastModalBackdrop.addEventListener('click', closeForecastModal);
+  }
+
+  // Кнопка "🖼 Карточка сигнала" (Task 12)
+  if (el.btnDownloadSignalCard) {
+    el.btnDownloadSignalCard.addEventListener('click', () => {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+      triggerHaptic('success');
+      const sym = activeForecastSymbol || (state.activeSymbol ? state.activeSymbol.replace('USDT', '') : 'BTC');
+      const cardUrl = `${API_BASE || ''}/api/signal-card?symbol=${encodeURIComponent(sym)}`;
+      showToast(`🖼 Загрузка карточки сигнала для ${sym}...`);
+      if (window.Telegram?.WebApp?.openLink) {
+        window.Telegram.WebApp.openLink(cardUrl);
+      } else {
+        window.open(cardUrl, '_blank');
+      }
+    });
   }
 
   // 1. Оплата через Telegram Stars (Мгновенная авто-выдача)
@@ -1385,10 +1551,17 @@
       fetchTariffs()
     ]);
 
-    // Автообновление котировок каждые 20 секунд
-    setInterval(() => {
-      fetchMarketOverview();
-    }, 20000);
+    // 3. Автообновление котировок и сигналов каждые 30 секунд (без полной перезагрузки страницы)
+    setInterval(async () => {
+      try {
+        await Promise.all([
+          fetchMarketOverview(),
+          fetchSignals()
+        ]);
+      } catch (err) {
+        console.warn('Silent auto-refresh error:', err);
+      }
+    }, 30000);
   }
 
   if (document.readyState === 'loading') {

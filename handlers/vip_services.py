@@ -1,6 +1,11 @@
 import html
+import logging
+import os
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ChatJoinRequest, ChatMemberUpdated
+from aiogram.types import (
+    Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
+    ChatJoinRequest, ChatMemberUpdated, FSInputFile
+)
 from aiogram.filters import Command
 from aiogram.filters.chat_member_updated import ChatMemberUpdatedFilter, JOIN_TRANSITION
 from aiogram.fsm.context import FSMContext
@@ -9,7 +14,9 @@ from aiogram.fsm.state import State, StatesGroup
 import config
 import database as db
 import keyboards as kb
-from services import scanner, knowledge_base, ai_analytics, vip_channel
+from services import scanner, knowledge_base, ai_analytics, vip_channel, canva_service
+
+logger = logging.getLogger("VIPServices")
 
 router = Router()
 
@@ -272,6 +279,171 @@ async def cmd_ai_forecast(message: Message, state: FSMContext):
             "Либо выберите актив из списка ниже для мгновенного анализа:"
         )
         await message.answer(text, parse_mode="HTML", reply_markup=kb.get_coin_selection_keyboard())
+
+
+def _build_signal_card_caption(data: dict) -> str:
+    """Формирует структурированную HTML-подпись под графической карточкой сигнала."""
+    ticker = data.get("ticker") or data.get("symbol", "BTC")
+    bias = str(data.get("bias", "Scalp Long"))
+    is_long = "Long" in bias or bias == "Strong Long"
+    trade_type = "🟢 LONG" if is_long else "🔴 SHORT"
+    prob = data.get("probability", 85)
+    rr = data.get("risk_reward", "1:2.5")
+    price_fmt = data.get("price_formatted") or f"${float(data.get('price', 0.0)):,.2f}"
+    entry_zone = data.get("entry_zone", "—")
+    tp1 = data.get("tp1", "—")
+    tp2 = data.get("tp2", "—")
+    sl = data.get("stop_loss", "—")
+    ind = data.get("indicators", {}) if isinstance(data.get("indicators"), dict) else {}
+    rsi_1h = ind.get("rsi_1h", data.get("rsi_1h", "—"))
+
+    return (
+        f"🎯 <b>VIP SIGNAL CARD | #{ticker}/USDT</b>\n"
+        f"────────────────────\n"
+        f"📈 <b>Сетап:</b> <b>{trade_type}</b> (Уверенность: <b>{prob}%</b>)\n"
+        f"💵 <b>Цена:</b> <code>{price_fmt}</code> | <b>R:R:</b> <code>{rr}</code> | <b>RSI:</b> <code>{rsi_1h}</code>\n\n"
+        f"📍 <b>Вход:</b> <code>{entry_zone}</code>\n"
+        f"🎯 <b>TP1:</b> <code>{tp1}</code>\n"
+        f"🚀 <b>TP2:</b> <code>{tp2}</code>\n"
+        f"⛔️ <b>SL:</b> <code>{sl}</code>\n"
+        f"────────────────────\n"
+        f"💎 <i>{config.PROJECT_NAME} • Canva Visual Signal Engine</i>"
+    )
+
+
+@router.callback_query(F.data.startswith("card_"))
+async def cb_signal_card(callback: CallbackQuery):
+    """Генерация визуальной карточки торгового сетапа (Canva Visual Signal Engine)."""
+    user_id = callback.from_user.id
+    if not await db.is_sub_active(user_id):
+        await callback.message.edit_text(get_vip_teaser_text(), parse_mode="HTML", reply_markup=kb.get_vip_teaser_keyboard())
+        await callback.answer()
+        return
+
+    symbol = callback.data.replace("card_", "")
+    normalized_sym = scanner.normalize_symbol(symbol) or symbol
+    base_ticker = normalized_sym[:-4] if normalized_sym.endswith("USDT") else normalized_sym
+
+    await callback.answer("🎨 Рендеринг карточки сигнала...", show_alert=False)
+    loading_msg = await callback.message.answer(
+        f"🎨 <i>Генерация институциональной карточки торгового сетапа <b>#{html.escape(base_ticker)}</b>...</i>",
+        parse_mode="HTML"
+    )
+
+    try:
+        data = await ai_analytics.analyze_asset(normalized_sym)
+        if not data or data.get("status") != "success":
+            await loading_msg.edit_text(
+                f"❌ <b>Не удалось сформировать сетап для {html.escape(normalized_sym)}.</b>",
+                parse_mode="HTML",
+                reply_markup=kb.get_analysis_result_keyboard(normalized_sym)
+            )
+            return
+
+        card_path = canva_service.render_local_signal_card(data)
+        caption = _build_signal_card_caption(data)
+
+        if card_path and os.path.exists(card_path):
+            await callback.message.answer_photo(
+                photo=FSInputFile(card_path),
+                caption=caption,
+                parse_mode="HTML",
+                reply_markup=kb.get_signal_card_keyboard(normalized_sym)
+            )
+            try:
+                await loading_msg.delete()
+            except Exception:
+                pass
+        else:
+            await loading_msg.edit_text(
+                caption,
+                parse_mode="HTML",
+                reply_markup=kb.get_signal_card_keyboard(normalized_sym)
+            )
+    except Exception as e:
+        logger.error(f"Ошибка при обработке callback card_{symbol}: {e}")
+        await loading_msg.edit_text(
+            f"❌ <b>Ошибка генерации графической карточки {html.escape(symbol)}.</b>",
+            parse_mode="HTML",
+            reply_markup=kb.get_analysis_result_keyboard(normalized_sym)
+        )
+
+
+@router.message(Command("card", "signal_card"))
+async def cmd_signal_card(message: Message, state: FSMContext):
+    """Команда генерации визуальной карточки сигнала: /card BTC или /card SOL."""
+    user_id = message.from_user.id
+    if not await db.is_sub_active(user_id):
+        await state.clear()
+        await message.answer(get_vip_teaser_text(), parse_mode="HTML", reply_markup=kb.get_vip_teaser_keyboard())
+        return
+
+    raw_text = message.text or message.caption or ""
+    args = raw_text.split(maxsplit=1)
+    if len(args) > 1 and args[1].strip():
+        raw_ticker = args[1].strip()
+        symbol = scanner.normalize_symbol(raw_ticker)
+        if not symbol:
+            await message.answer(
+                "❌ <b>Некорректный формат тикера.</b>\n\n"
+                "Пример использования: <code>/card BTC</code> или <code>/card SOL</code>",
+                parse_mode="HTML",
+                reply_markup=kb.get_custom_coin_keyboard()
+            )
+            return
+
+        base_ticker = symbol[:-4] if symbol.endswith("USDT") else symbol
+        loading = await message.answer(
+            f"🎨 <i>Рендеринг визуальной карточки торгового сетапа <b>#{html.escape(base_ticker)}</b>...</i>",
+            parse_mode="HTML"
+        )
+        try:
+            data = await ai_analytics.analyze_asset(symbol)
+            if not data or data.get("status") != "success":
+                await loading.edit_text(
+                    f"❌ <b>Не удалось сформировать сетап для {html.escape(symbol)}.</b>",
+                    parse_mode="HTML",
+                    reply_markup=kb.get_analysis_result_keyboard(symbol)
+                )
+                return
+
+            card_path = canva_service.render_local_signal_card(data)
+            caption = _build_signal_card_caption(data)
+
+            if card_path and os.path.exists(card_path):
+                await message.answer_photo(
+                    photo=FSInputFile(card_path),
+                    caption=caption,
+                    parse_mode="HTML",
+                    reply_markup=kb.get_signal_card_keyboard(symbol)
+                )
+                try:
+                    await loading.delete()
+                except Exception:
+                    pass
+            else:
+                await loading.edit_text(
+                    caption,
+                    parse_mode="HTML",
+                    reply_markup=kb.get_signal_card_keyboard(symbol)
+                )
+        except Exception as e:
+            logger.error(f"Ошибка при генерации карточки /card: {e}")
+            await loading.edit_text(
+                f"❌ <b>Ошибка при создании карточки по {html.escape(symbol)}.</b>",
+                parse_mode="HTML",
+                reply_markup=kb.get_analysis_result_keyboard(symbol)
+            )
+        finally:
+            await state.clear()
+    else:
+        text = (
+            "🖼 <b>Генерация визуальной карточки сигнала (VIP):</b>\n\n"
+            "Укажите тикер актива через пробел, например: <code>/card BTC</code> или <code>/card SOL</code>.\n"
+            "Либо выберите актив из списка ниже для мгновенного анализа:"
+        )
+        await message.answer(text, parse_mode="HTML", reply_markup=kb.get_coin_selection_keyboard())
+
 
 
 @router.callback_query(F.data == "signal_radar")

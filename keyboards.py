@@ -100,7 +100,10 @@ def get_analysis_result_keyboard(symbol: str = "") -> InlineKeyboardMarkup:
     """Клавиатура под отчетом анализа монеты."""
     buttons = []
     if symbol:
-        buttons.append([InlineKeyboardButton(text="🧠 Глубокий AI-прогноз", callback_data=f"ai_forecast_{symbol}")])
+        buttons.append([
+            InlineKeyboardButton(text="🧠 Глубокий AI-прогноз", callback_data=f"ai_forecast_{symbol}"),
+            InlineKeyboardButton(text="🖼 Карточка сигнала", callback_data=f"card_{symbol}")
+        ])
     buttons.extend([
         [
             InlineKeyboardButton(text="🔄 Другая монета", callback_data="coin_select"),
@@ -118,10 +121,31 @@ def get_ai_forecast_keyboard(symbol: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📊 Экспресс-RSI", callback_data=f"analyze_{symbol}")
         ],
         [
+            InlineKeyboardButton(text="🖼 Карточка сигнала", callback_data=f"card_{symbol}")
+        ],
+        [
             InlineKeyboardButton(text="🔍 Другой актив", callback_data="coin_select"),
             InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")
         ]
     ])
+
+def get_signal_card_keyboard(symbol: str = "") -> InlineKeyboardMarkup:
+    """Клавиатура под сгенерированной визуальной карточкой сигнала."""
+    buttons = []
+    if symbol:
+        buttons.append([
+            InlineKeyboardButton(text="🔄 Обновить карточку", callback_data=f"card_{symbol}"),
+            InlineKeyboardButton(text="🧠 AI-прогноз", callback_data=f"ai_forecast_{symbol}")
+        ])
+    buttons.extend([
+        [
+            InlineKeyboardButton(text="📊 Экспресс-RSI", callback_data=f"analyze_{symbol}" if symbol else "coin_select"),
+            InlineKeyboardButton(text="🔍 Другой актив", callback_data="coin_select")
+        ],
+        [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="main_menu")]
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 
 def get_knowledge_base_keyboard() -> InlineKeyboardMarkup:

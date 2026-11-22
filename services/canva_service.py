@@ -311,13 +311,13 @@ class CanvaService:
 
     def render_local_signal_card(
         self,
-        symbol: str,
-        signal_type: str,
-        entry_price: float,
-        tp1: float,
-        tp2: float,
-        stop_loss: float,
-        rsi_val: float,
+        symbol: Any = "BTCUSDT",
+        signal_type: str = "LONG",
+        entry_price: float = 0.0,
+        tp1: float = 0.0,
+        tp2: float = 0.0,
+        stop_loss: float = 0.0,
+        rsi_val: float = 50.0,
         timeframe: str = "1H",
         winrate_pct: int = 94,
         notes: str = "",
@@ -326,7 +326,24 @@ class CanvaService:
         """
         Локальный высокопроизводительный рендерер сигнальной графической карточки (1200x675) на базе Pillow.
         Обеспечивает 100% автономность сервиса при работе оффлайн или без активного интернет-соединения с Canva.
+        Поддерживает передачу как отдельных аргументов, так и комплексного словаря анализа (ai_analytics.analyze_asset).
         """
+        if isinstance(symbol, dict):
+            analysis = symbol
+            sym_raw = analysis.get("symbol") or analysis.get("ticker", "BTCUSDT")
+            bias_str = str(analysis.get("bias", "LONG")).lower()
+            is_sh = "short" in bias_str
+            signal_type = "SHORT" if is_sh else "LONG"
+            entry_price = float(analysis.get("price") or 0.0)
+            tp1 = float(analysis.get("tp1_price") or (entry_price * (0.97 if is_sh else 1.03)))
+            tp2 = float(analysis.get("tp2_price") or (entry_price * (0.95 if is_sh else 1.06)))
+            stop_loss = float(analysis.get("stop_loss_price") or (entry_price * (1.02 if is_sh else 0.98)))
+            indicators = analysis.get("indicators", {}) if isinstance(analysis.get("indicators"), dict) else {}
+            rsi_val = float(indicators.get("rsi_1h") or 50.0)
+            timeframe = "1H"
+            winrate_pct = int(analysis.get("probability") or 94)
+            notes = notes or str(analysis.get("bias_badge") or "")
+            symbol = sym_raw
         width, height = 1200, 675
         is_long = signal_type.upper() == "LONG"
         accent_hex = self.COLORS["accent_green"] if is_long else self.COLORS["accent_red"]
@@ -412,9 +429,18 @@ class CanvaService:
         draw.text((755, box_y + 135), "Запуск: t.me/cryptoradar_live_bot", fill=self.COLORS["accent_cyan"], font=font_small)
 
         # Сохранение файла
-        clean_symbol = symbol.replace("/", "_").replace("\\", "_").lower()
-        filename = output_filename or f"signal_card_{clean_symbol}_{signal_type.lower()}.png"
-        filepath = self.output_dir / filename
+        if output_filename:
+            target_p = Path(output_filename)
+            if target_p.is_absolute() or len(target_p.parts) > 1:
+                filepath = target_p
+            else:
+                filepath = self.output_dir / target_p
+        else:
+            clean_symbol = symbol.replace("/", "_").replace("\\", "_").lower()
+            filename = f"signal_card_{clean_symbol}_{signal_type.lower()}.png"
+            filepath = self.output_dir / filename
+
+        filepath.parent.mkdir(parents=True, exist_ok=True)
         img.save(filepath, format="PNG", quality=95)
         
         logger.info(f"Локальная сигнальная карточка сгенерирована: {filepath}")
@@ -451,3 +477,9 @@ class CanvaService:
 
 # Глобальный синглтон сервиса
 canva_service = CanvaService()
+
+
+def render_local_signal_card(*args: Any, **kwargs: Any) -> str:
+    """Глобальная функция-обертка для рендеринга карточки сигнала."""
+    return canva_service.render_local_signal_card(*args, **kwargs)
+

@@ -79,3 +79,8 @@ CANVA_FOLDER_URL = os.getenv("CANVA_FOLDER_URL", "https://www.canva.com/folder/F
 CANVA_TEAM_ID = os.getenv("CANVA_TEAM_ID", "oBZaQa2FDEXm2wgikuzXZ8")
 CANVA_ACCOUNT_NAME = os.getenv("CANVA_ACCOUNT_NAME", "KIIIER")
 
+# Notion Command Center Integration
+NOTION_PAGE_ID = os.getenv("NOTION_PAGE_ID", "41086ecf3dff80e28640e5a0071f5453").strip()
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "").strip()
+NOTION_SYNC_INTERVAL_SECONDS = int(os.getenv("NOTION_SYNC_INTERVAL_SECONDS", "3600"))
+

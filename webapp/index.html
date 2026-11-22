@@ -152,6 +152,7 @@
               <div class="chart-title-group">
                 <span class="chart-symbol" id="chart-symbol-title">BTC/USDT</span>
                 <span class="chart-exchange-tag">BINANCE SPOT</span>
+                <button id="btn-open-forecast" class="btn-ai-forecast" type="button" aria-label="Открыть AI-прогноз по монете">⚡ AI Прогноз</button>
               </div>
               <div class="chart-price-group">
                 <span class="chart-price" id="chart-price-display">$91,850.00</span>
@@ -310,6 +311,34 @@
         <div class="auto-delivery-badge">
           ⚡ Мгновенная авто-выдача: VIP-статус активируется автоматически сразу после оплаты
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI FORECAST MODAL (Task 12) -->
+  <div id="forecast-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="forecast-modal-title">
+    <div class="modal-backdrop" id="forecast-modal-backdrop"></div>
+    <div class="modal-content glass-card-modal forecast-modal-box">
+      <button class="modal-close-btn" id="btn-close-forecast-modal" type="button" aria-label="Закрыть окно AI-прогноза">✕</button>
+      
+      <div class="modal-header">
+        <span class="modal-badge badge-ai-pulse">QUANT AI FORECAST</span>
+        <h3 class="modal-title" id="forecast-modal-title">AI-прогноз актива</h3>
+        <p class="modal-desc" id="forecast-modal-subtitle">Комплексный квантовый скоринг и расчетные уровни</p>
+      </div>
+
+      <!-- Forecast Content Area -->
+      <div class="forecast-body" id="forecast-content">
+        <div class="forecast-loading">
+          <p>Загрузка аналитических данных...</p>
+        </div>
+      </div>
+
+      <!-- Forecast Actions Footer -->
+      <div class="forecast-actions-footer">
+        <button id="btn-download-signal-card" class="btn-signal-card" type="button">
+          🖼 Карточка сигнала
+        </button>
       </div>
     </div>
   </div>

@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import datetime
 import json
 import logging
@@ -12,6 +13,7 @@ from aiohttp import web
 import config
 import database as db
 from services import scanner, ai_analytics
+from services.canva_service import canva_service
 
 logger = logging.getLogger("WebServer")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
@@ -141,7 +143,8 @@ async def cors_middleware(request: web.Request, handler):
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, HEAD"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Telegram-Init-Data"
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    if "Cache-Control" not in response.headers:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
 # --- ХЕНДЛЕРЫ СТАТИКИ ---
@@ -578,6 +581,105 @@ async def handle_ai_forecast(request: web.Request) -> web.Response:
             "message": "Внутренняя ошибка сервера при расчете ИИ-прогноза."
         }, status=500)
 
+async def handle_signal_card(request: web.Request) -> web.Response:
+    """
+    Эндпоинт /api/signal-card (Task 12)
+    Принимает query-параметр ?symbol=BTC (или ?symbol=BTCUSDT).
+    Выполняет анализ актива через ai_analytics.analyze_asset(symbol),
+    рендерит графическую сигнальную карточку через canva_service.render_local_signal_card(analysis),
+    и возвращает PNG с заголовком Cache-Control: public, max-age=60.
+    При ?format=json возвращает JSON с метаданными и base64 изображением.
+    """
+    symbol_param = request.query.get("symbol")
+    if not symbol_param or not symbol_param.strip():
+        return web.json_response({
+            "status": "error",
+            "message": "Параметр 'symbol' обязателен. Пример: /api/signal-card?symbol=BTC"
+        }, status=400)
+
+    norm_symbol = scanner.normalize_symbol(symbol_param.strip())
+    if not norm_symbol:
+        return web.json_response({
+            "status": "error",
+            "message": f"Некорректный формат символа: '{symbol_param}'. Пример: BTC, ETH, SOL."
+        }, status=400)
+
+    try:
+        analysis = await ai_analytics.analyze_asset(norm_symbol)
+        if not analysis or analysis.get("status") == "error":
+            return web.json_response({
+                "status": "error",
+                "message": analysis.get("message", "Не удалось провести анализ актива")
+            }, status=404)
+
+        card_path = canva_service.render_local_signal_card(analysis)
+        if not os.path.exists(card_path):
+            return web.json_response({
+                "status": "error",
+                "message": "Ошибка генерации изображения сигнальной карточки."
+            }, status=500)
+
+        with open(card_path, "rb") as f:
+            image_bytes = f.read()
+
+        format_param = (request.query.get("format") or "").lower().strip()
+        if format_param == "json":
+            b64_img = base64.b64encode(image_bytes).decode("utf-8")
+            return web.json_response({
+                "status": "success",
+                "symbol": analysis.get("symbol", norm_symbol),
+                "ticker": analysis.get("ticker", norm_symbol.replace("USDT", "")),
+                "bias": analysis.get("bias", "LONG"),
+                "bias_badge": analysis.get("bias_badge", ""),
+                "price": analysis.get("price"),
+                "probability": analysis.get("probability"),
+                "card_path": card_path,
+                "image_base64": f"data:image/png;base64,{b64_img}",
+                "timestamp": datetime.datetime.now().isoformat()
+            }, headers={
+                "Cache-Control": "public, max-age=60"
+            })
+
+        return web.Response(
+            body=image_bytes,
+            content_type="image/png",
+            headers={
+                "Cache-Control": "public, max-age=60",
+                "Content-Disposition": f'inline; filename="signal_{norm_symbol.lower()}.png"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Внутренняя ошибка /api/signal-card: {e}")
+        return web.json_response({
+            "status": "error",
+            "message": "Внутренняя ошибка сервера при генерации карточки сигнала."
+        }, status=500)
+
+async def handle_notion_metrics(request: web.Request) -> web.Response:
+    """Возвращает актуальные метрики SaaS для синхронизации с Notion Command Center."""
+    try:
+        from services.notion_sync import fetch_platform_metrics, notion_sync_service
+        metrics = await fetch_platform_metrics()
+        return web.json_response({
+            "status": "success",
+            "page_id": notion_sync_service.page_id,
+            "command_center_url": f"https://app.notion.com/p/{notion_sync_service.page_id}",
+            "metrics": metrics
+        })
+    except Exception as e:
+        logger.error(f"Ошибка в /api/notion/metrics: {e}")
+        return web.json_response({"status": "error", "message": str(e)}, status=500)
+
+async def handle_notion_sync(request: web.Request) -> web.Response:
+    """Триггер синхронизации метрик с Notion Command Center."""
+    try:
+        from services.notion_sync import notion_sync_service
+        result = await notion_sync_service.sync()
+        return web.json_response(result)
+    except Exception as e:
+        logger.error(f"Ошибка в /api/notion/sync: {e}")
+        return web.json_response({"status": "error", "message": str(e)}, status=500)
+
 def create_app() -> web.Application:
     """Создание и конфигурация aiohttp приложения."""
     app = web.Application(middlewares=[cors_middleware])
@@ -591,6 +693,10 @@ def create_app() -> web.Application:
     app.router.add_get("/api/user-status", handle_user_status)
     app.router.add_get("/api/ai-forecast", handle_ai_forecast)
     app.router.add_post("/api/ai-forecast", handle_ai_forecast)
+    app.router.add_get("/api/signal-card", handle_signal_card)
+    app.router.add_get("/api/notion/metrics", handle_notion_metrics)
+    app.router.add_get("/api/notion/sync", handle_notion_sync)
+    app.router.add_post("/api/notion/sync", handle_notion_sync)
 
 
     # Статические файлы для SPA WebApp
