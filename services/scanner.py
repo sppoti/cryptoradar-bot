@@ -282,19 +282,16 @@ async def get_coin_analysis(symbol: str, name: str = "") -> str:
         rsi_1h_status = ""
 
     report = (
-        f"📊 <b>Экспресс-анализ: {html.escape(base_name)} / USDT</b>\n"
-        f"────────────────────\n"
-        f"💵 <b>Текущая цена:</b> <code>{price_str}</code>\n"
-        f"📈 <b>Изменение за 24ч:</b> <b>{change_emoji}{change_pct:.2f}%</b>\n"
-        f"🔼 <b>Максимум 24ч:</b> {high_str}\n"
-        f"🔽 <b>Минимум 24ч:</b> {low_str}\n"
-        f"💧 <b>Объем торгов:</b> {vol_str}\n\n"
-        f"🧭 <b>Технические индикаторы:</b>\n"
-        f"• Индикатор RSI (1h): <b>{rsi_1h_display}</b>{rsi_1h_status}\n"
-        f"• Индикатор RSI (4h): <b>{rsi_4h_display}</b>\n\n"
-        f"🎯 <b>Вердикт сканера:</b>\n{verdict}\n"
-        f"────────────────────\n"
-        f"<i>Данные обновлены в реальном времени с биржи Binance.</i>"
+        f"<b>┌── [ TERMINAL 2.0 // Экспресс-анализ: {html.escape(base_name)} / USDT ]</b>\n"
+        f"│ <b>Текущая цена:</b> <code>{price_str}</code> (<b>{change_emoji}{change_pct:.2f}%</b>)\n"
+        f"│ <b>24h Диапазон:</b> <code>{low_str}</code> — <code>{high_str}</code>\n"
+        f"│ <b>Объем 24ч:</b> <code>{vol_str}</code>\n"
+        f"├── <b>ТЕХНИЧЕСКИЕ ИНДИКАТОРЫ:</b>\n"
+        f"│ • Индикатор RSI (1h): <b>{rsi_1h_display}</b>{rsi_1h_status}\n"
+        f"│ • Индикатор RSI (4h): <b>{rsi_4h_display}</b>\n"
+        f"├── <b>Вердикт сканера:</b>\n"
+        f"│ {verdict}\n"
+        f"<b>└── [ BINANCE FEED • REALTIME ]</b>"
     )
     return report
 

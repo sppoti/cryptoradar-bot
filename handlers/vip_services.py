@@ -27,14 +27,17 @@ def get_vip_teaser_text() -> str:
     """Текст предложения оформить VIP-подписку для аналитических инструментов."""
     sub_1m = config.TARIFFS.get("sub_1m", {"rub_price": 150, "stars": 150})
     return (
-        "🔒 <b>Инструмент «Экспресс-анализ монеты» доступен только для VIP-участников!</b>\n\n"
-        "📌 <b>Что получает подписчик:</b>\n"
-        "• Мгновенный расчет индикаторов <b>RSI (1h и 4h)</b> в реальном времени\n"
-        "• Определение зон экстремальной перекупленности и перепроданности\n"
-        "• Торговый вердикт (Лонг / Шорт / Накопление) без задержек\n"
-        "• Экспресс-анализ <b>любой собственной монеты</b> на бирже Binance\n"
-        "• Доступ в закрытый VIP-канал с ежедневными рекомендациями\n\n"
-        f"💎 Оформите подписку от {sub_1m['stars']} ⭐ ниже (мгновенная авто-выдача), чтобы разблокировать доступ:"
+        "<b>┌── [ TERMINAL 2.0 // VIP ACCESS ]</b>\n"
+        "│ Инструмент «Экспресс-анализ монеты» доступен только для VIP-участников!\n"
+        "├── <b>ПРЕИМУЩЕСТВА ПОДПИСКИ:</b>\n"
+        "│ • Расчет индикаторов <b>RSI (1h и 4h)</b> в реальном времени\n"
+        "│ • Зоны экстремальной перекупленности и перепроданности\n"
+        "│ • Торговый вердикт (Лонг / Шорт / Накопление)\n"
+        "│ • Экспресс-анализ <b>любой собственной монеты</b> на бирже Binance\n"
+        "│ • Доступ в закрытый VIP-канал с сетапами\n"
+        "├── <b>ТАРИФЫ:</b>\n"
+        f"│ Активация от <b>{sub_1m['stars']} ⭐</b> с мгновенной авто-выдачей доступа.\n"
+        "<b>└── [ ВЫБЕРИТЕ ТАРИФ НИЖЕ ]</b>"
     )
 
 @router.callback_query(F.data == "market_overview")
@@ -298,20 +301,37 @@ def _build_signal_card_caption(data: dict) -> str:
     rsi_1h = ind.get("rsi_1h", data.get("rsi_1h", "—"))
 
     return (
-        f"🎯 <b>VIP SIGNAL CARD | #{ticker}/USDT</b>\n"
-        f"────────────────────\n"
-        f"📈 <b>Сетап:</b> <b>{trade_type}</b> (Уверенность: <b>{prob}%</b>)\n"
-        f"💵 <b>Цена:</b> <code>{price_fmt}</code> | <b>R:R:</b> <code>{rr}</code> | <b>RSI:</b> <code>{rsi_1h}</code>\n\n"
-        f"📍 <b>Вход:</b> <code>{entry_zone}</code>\n"
-        f"🎯 <b>TP1:</b> <code>{tp1}</code>\n"
-        f"🚀 <b>TP2:</b> <code>{tp2}</code>\n"
-        f"⛔️ <b>SL:</b> <code>{sl}</code>\n"
-        f"────────────────────\n"
-        f"💎 <i>{config.PROJECT_NAME} • Canva Visual Signal Engine</i>"
+        f"<b>┌── [ TERMINAL 2.0 // VIP SIGNAL CARD: #{ticker}/USDT ]</b>\n"
+        f"│ <b>Сетап:</b> {trade_type} | <b>Conf:</b> <code>{prob}%</code> | <b>R:R:</b> <code>{rr}</code>\n"
+        f"│ <b>Котировка:</b> <code>{price_fmt}</code> | <b>RSI(1h):</b> <code>{rsi_1h}</code>\n"
+        f"├── <b>TARGET LEVELS:</b>\n"
+        f"│ <b>Вход:</b> <code>{entry_zone}</code>\n"
+        f"│ <b>TP1:</b>  <code>{tp1}</code> | <b>TP2:</b> <code>{tp2}</code>\n"
+        f"│ <b>SL:</b>   <code>{sl}</code>\n"
+        f"<b>└── [ {config.PROJECT_NAME} • TACTICAL ENGINE ]</b>"
     )
 
 
-@router.callback_query(F.data.startswith("card_"))
+@router.callback_query(F.data == "card_select")
+async def cb_card_select(callback: CallbackQuery, state: FSMContext):
+    """Выбор монеты для генерации визуальной карточки сетапа."""
+    await state.clear()
+    user_id = callback.from_user.id
+    if not ((user_id == config.ADMIN_ID) or await db.is_sub_active(user_id)):
+        await callback.message.edit_text(get_vip_teaser_text(), parse_mode="HTML", reply_markup=kb.get_vip_teaser_keyboard())
+        await callback.answer()
+        return
+
+    text = (
+        "<b>┌── [ TERMINAL 2.0 // СЕТАП-КАРТА (PNG) ]</b>\n"
+        "│ Выберите актив для рендеринга институциональной карточки:\n"
+        "<b>└── [ CANVA VISUAL ENGINE ]</b>"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb.get_card_selection_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("card_") & (F.data != "card_select"))
 async def cb_signal_card(callback: CallbackQuery):
     """Генерация визуальной карточки торгового сетапа (Canva Visual Signal Engine)."""
     user_id = callback.from_user.id

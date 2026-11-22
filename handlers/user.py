@@ -149,16 +149,17 @@ async def cmd_start(message: Message, state: FSMContext):
     is_vip = await db.is_sub_active(user_id)
     
     text = (
-        f"👋 <b>Приветствуем в {config.PROJECT_NAME}!</b>\n\n"
-        f"Это профессиональная SaaS-платформа мониторинга крипторынка, поиска торговых аномалий и закрытой аналитики.\n\n"
-        f"💎 <b>Что доступно в сервисе:</b>\n"
-        f"• <b>📱 WebApp Терминал (PRO):</b> интерактивные графики TradingView, живой RSI-сканер и AI-сетапы прямо в Telegram.\n"
-        f"• <b>Обзор рынка (Live):</b> котировки и динамика топовых монет в реальном времени.\n"
-        f"• <b>Экспресс-анализ монеты (VIP):</b> мгновенный расчет индикаторов RSI (1h/4h) и торговый вердикт.\n"
-        f"• <b>Радар сигналов (VIP):</b> выявление зон перекупленности и перепроданности для входа в сделки.\n"
-        f"• <b>База знаний (VIP):</b> закрытые авторские руководства, стратегии и риск-менеджмент.\n"
-        f"• <b>Закрытый канал с сигналами:</b> ежедневные посты и сводки на автопилоте.\n\n"
-        f"Выберите раздел ниже или откройте WebApp Терминал 👇"
+        f"<b>┌── [ TERMINAL 2.0 // CRYPTORADAR PRO ]</b>\n"
+        f"│ 👋 Приветствуем в SaaS-платформе мониторинга крипторынка и закрытой аналитики.\n"
+        f"├── <b>ДОСТУПНЫЙ ФУНКЦИОНАЛ:</b>\n"
+        f"│ • <b>⚡ WebApp Терминал (PRO):</b> TradingView, живой RSI-сканер, AI-сетапы\n"
+        f"│ • <b>📊 Экспресс-анализ (VIP):</b> расчет индикаторов RSI (1h/4h) и вердикт\n"
+        f"│ • <b>🧠 Deep AI-прогноз:</b> квантовые торговые планы и уровни TP/SL\n"
+        f"│ • <b>🚨 Радар сигналов (RSI):</b> зоны экстремальной перекупленности\n"
+        f"│ • <b>🖼 Сетап-карта (PNG):</b> графические карточки для шеринга\n"
+        f"│ • <b>💎 VIP-клуб & Канал:</b> закрытые инсайды и автопилот-сигналы\n"
+        f"│ • <b>🤝 Партнерам (30% RevShare):</b> пожизненный пассивный доход\n"
+        f"<b>└── [ ВЫБЕРИТЕ РАЗДЕЛ В МЕНЮ НИЖЕ ]</b>"
     )
     
     await message.answer(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin, user_id=user_id, is_vip=is_vip))
@@ -170,13 +171,14 @@ async def cmd_webapp(message: Message):
     user_id = message.from_user.id
     is_vip = await db.is_sub_active(user_id)
     text = (
-        f"📱 <b>Интерактивный WebApp Терминал {config.PROJECT_NAME}</b>\n\n"
-        f"Торговый интерфейс институционального уровня прямо внутри Telegram:\n\n"
-        f"📈 <b>Живой график TradingView</b> с поддержкой индикаторов RSI и скользящих средних\n"
-        f"🚨 <b>Радар аномалий</b> и зон перекупленности/перепроданности по топ-активам\n"
-        f"🎯 <b>AI-сигналы</b> со скорингом точности, целями TP1/TP2 и Stop-Loss\n"
-        f"💎 <b>Мгновенное управление VIP-подпиской</b> через Telegram Stars (⭐) с автоматической выдачей\n\n"
-        f"Нажмите кнопку ниже для запуска терминала 👇"
+        f"<b>┌── [ TERMINAL 2.0 // WEBAPP TERMINAL PRO ]</b>\n"
+        f"│ Институциональный торговый терминал прямо внутри Telegram:\n"
+        f"├── <b>ВОЗМОЖНОСТИ ТЕРМИНАЛА:</b>\n"
+        f"│ • <b>Живой график TradingView</b> с поддержкой RSI и EMA\n"
+        f"│ • <b>Радар аномалий</b> и зон перекупленности/перепроданности\n"
+        f"│ • <b>AI-сигналы</b> со скорингом точности, целями TP1/TP2 и Stop-Loss\n"
+        f"│ • <b>Мгновенное управление VIP</b> через Telegram Stars (⭐)\n"
+        f"<b>└── [ НАЖМИТЕ КНОПКУ НИЖЕ ДЛЯ ЗАПУСКА ]</b>"
     )
     await message.answer(text, parse_mode="HTML", reply_markup=kb.get_webapp_keyboard(user_id=user_id, is_vip=is_vip))
 
@@ -187,14 +189,14 @@ async def cmd_help(message: Message):
     is_admin = (user_id == config.ADMIN_ID)
     is_vip = await db.is_sub_active(user_id)
     text = (
-        f"🧭 <b>Навигация по платформе {config.PROJECT_NAME}:</b>\n\n"
-        f"• <b>/start</b> — Главное меню и сводка возможностей\n"
-        f"• <b>/webapp</b> или <b>/app</b> — Запуск Mini App терминала\n"
-        f"• <b>/forecast &lt;тикер&gt;</b> или <b>/ai &lt;тикер&gt;</b> — Глубокий AI-прогноз\n"
-        f"• <b>/partner</b> или <b>/affiliate</b> — Кабинет партнера (30% Rev-Share)\n"
-        f"• <b>/leaderboard</b> или <b>/top</b> — Турнир рефералов\n"
-        f"• <b>/help</b> — Справка по командам\n\n"
-        f"Выберите раздел в меню ниже 👇"
+        f"<b>┌── [ TERMINAL 2.0 // НАВИГАЦИЯ И КОМАНДЫ ]</b>\n"
+        f"│ • <b>/start</b> — Главное меню платформы\n"
+        f"│ • <b>/webapp</b> или <b>/app</b> — Запуск Mini App терминала\n"
+        f"│ • <b>/forecast &lt;тикер&gt;</b> или <b>/ai &lt;тикер&gt;</b> — Глубокий AI-прогноз\n"
+        f"│ • <b>/partner</b> или <b>/affiliate</b> — Кабинет партнера (30% RevShare)\n"
+        f"│ • <b>/leaderboard</b> или <b>/top</b> — Турнир рефералов\n"
+        f"│ • <b>/help</b>, <b>/menu</b> — Справка по командам\n"
+        f"<b>└── [ ВЫБЕРИТЕ РАЗДЕЛ В МЕНЮ НИЖЕ ]</b>"
     )
     await message.answer(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin, user_id=user_id, is_vip=is_vip))
 
@@ -205,8 +207,9 @@ async def cb_main_menu(callback: CallbackQuery, state: FSMContext):
     is_admin = (user_id == config.ADMIN_ID)
     is_vip = await db.is_sub_active(user_id)
     text = (
-        f"🏠 <b>Главное меню {config.PROJECT_NAME}</b>\n\n"
-        f"Выберите интересующий инструмент:"
+        f"<b>┌── [ TERMINAL 2.0 // ГЛАВНОЕ МЕНЮ ]</b>\n"
+        f"│ Выберите интересующий раздел платформы:\n"
+        f"<b>└── [ {config.PROJECT_NAME} ]</b>"
     )
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin, user_id=user_id, is_vip=is_vip))

@@ -24,36 +24,64 @@ def get_tma_url(user_id: int = None, is_vip: bool = False, coin: str = None) -> 
     return f"{base}{sep}{'&'.join(params)}"
 
 def get_main_menu(is_admin: bool = False, user_id: int = None, is_vip: bool = False) -> InlineKeyboardMarkup:
-    """Главное меню бота с доступом к сервисам и Telegram Mini App."""
+    """Главное меню бота с доступом к сервисам и Telegram Mini App (Terminal 2.0)."""
     webapp_url = get_tma_url(user_id=user_id, is_vip=is_vip)
-    webapp_text = "📱 Открыть WebApp Терминал (PRO VIP)" if is_vip else "📱 Открыть WebApp Терминал (PRO)"
-    tariffs_text = "⭐ Продлить VIP-доступ" if is_vip else "💎 Оформить VIP-доступ"
+    webapp_text = "⚡ ТЕРМИНАЛ PRO VIP — WEBAPP (LIVE FEED)" if is_vip else "⚡ ТЕРМИНАЛ PRO — WEBAPP (LIVE FEED)"
+    tariffs_text = "⭐ Продлить VIP-доступ" if is_vip else "⭐ Тарифы & Stars"
 
     buttons = [
+        # Row 1 (Hero)
         [InlineKeyboardButton(text=webapp_text, web_app=WebAppInfo(url=webapp_url))],
-        [InlineKeyboardButton(text="🔐 Перейти в VIP-канал", callback_data="enter_vip_channel")],
-        [InlineKeyboardButton(text=tariffs_text, callback_data="tariffs")],
+        # Row 2 (Trading)
         [
-            InlineKeyboardButton(text="🌐 Обзор рынка (Live)", callback_data="market_overview"),
-            InlineKeyboardButton(text="📊 Анализ монеты", callback_data="coin_select")
+            InlineKeyboardButton(text="📊 Экспресс-анализ", callback_data="coin_select"),
+            InlineKeyboardButton(text="🧠 Deep AI-прогноз", callback_data="custom_coin")
         ],
+        # Row 3 (Signals)
         [
             InlineKeyboardButton(text="🚨 Радар сигналов (RSI)", callback_data="signal_radar"),
-            InlineKeyboardButton(text="📚 База знаний", callback_data="kb_list")
+            InlineKeyboardButton(text="🖼 Сетап-карта (PNG)", callback_data="card_select")
         ],
+        # Row 4 (VIP & Monetization)
         [
-            InlineKeyboardButton(text="👤 Мой профиль", callback_data="profile"),
-            InlineKeyboardButton(text="🤝 Партнерам (30% Rev-Share)", callback_data="partner_dashboard")
+            InlineKeyboardButton(text="💎 VIP-клуб & Канал", callback_data="enter_vip_channel"),
+            InlineKeyboardButton(text=tariffs_text, callback_data="tariffs")
         ],
+        # Row 5 (Partners & Profile)
         [
-            InlineKeyboardButton(text="🎁 Бесплатные дни", callback_data="referrals"),
-            InlineKeyboardButton(text="🏆 Турнир рефералов", callback_data="leaderboard")
+            InlineKeyboardButton(text="🤝 Партнерам (30% RevShare)", callback_data="partner_dashboard"),
+            InlineKeyboardButton(text="👤 Профиль & Кабинет", callback_data="profile")
         ],
-        [InlineKeyboardButton(text="💬 Поддержка", callback_data="support")]
+        # Row 6 (Service)
+        [
+            InlineKeyboardButton(text="📚 База знаний", callback_data="kb_list"),
+            InlineKeyboardButton(text="💬 Поддержка", callback_data="support")
+        ]
     ]
     if is_admin:
+        # Row 7 (Admin)
         buttons.append([InlineKeyboardButton(text="👑 Панель Администратора", callback_data="admin_panel")])
         
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_card_selection_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для быстрого выбора актива для генерации визуальной карточки сигнала."""
+    buttons = [
+        [
+            InlineKeyboardButton(text="Bitcoin (BTC)", callback_data="card_BTCUSDT"),
+            InlineKeyboardButton(text="Ethereum (ETH)", callback_data="card_ETHUSDT")
+        ],
+        [
+            InlineKeyboardButton(text="Solana (SOL)", callback_data="card_SOLUSDT"),
+            InlineKeyboardButton(text="Toncoin (TON)", callback_data="card_TONUSDT")
+        ],
+        [
+            InlineKeyboardButton(text="BNB", callback_data="card_BNBUSDT"),
+            InlineKeyboardButton(text="Ripple (XRP)", callback_data="card_XRPUSDT"),
+            InlineKeyboardButton(text="Dogecoin (DOGE)", callback_data="card_DOGEUSDT")
+        ],
+        [InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="main_menu")]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_webapp_keyboard(user_id: int = None, is_vip: bool = False) -> InlineKeyboardMarkup:
