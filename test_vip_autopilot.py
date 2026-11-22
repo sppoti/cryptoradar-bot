@@ -184,21 +184,16 @@ class TestVipAutopilotSystem(unittest.IsolatedAsyncioTestCase):
             success = await vip_autopilot.publish_vip_morning_briefing(bot)
             self.assertTrue(success)
 
-            bot.send_message.assert_called_once()
-            call_kwargs = bot.send_message.call_args.kwargs
+            bot.send_photo.assert_called_once()
+            call_kwargs = bot.send_photo.call_args.kwargs
             self.assertEqual(call_kwargs["chat_id"], config.VIP_CHANNEL_ID)
             self.assertEqual(call_kwargs["parse_mode"], "HTML")
 
-            msg_text = call_kwargs["text"]
-            self.assertIn("VIP MORNING BRIEFING & ROADMAP", msg_text)
-            self.assertIn("72/100", msg_text)
-            self.assertIn("Жадность", msg_text)
-            self.assertIn("Bitcoin (BTC)", msg_text)
-            self.assertIn("$91,450.00", msg_text)
-            self.assertIn("Ethereum (ETH)", msg_text)
-            self.assertIn("$3,240.50", msg_text)
-            self.assertIn("#NEAR", msg_text)
-            self.assertIn("АНАЛИТИЧЕСКИЙ ВЫВОД И ПЛАН РАБОТЫ", msg_text)
+            msg_caption = call_kwargs["caption"]
+            self.assertIn("VIP MORNING BRIEFING", msg_caption)
+            self.assertIn("72/100", msg_caption)
+            self.assertIn("Жадность", msg_caption)
+            self.assertIn("#BTC", msg_caption)
 
             # Проверка кнопок
             kb_obj = call_kwargs["reply_markup"]
@@ -251,26 +246,15 @@ class TestVipAutopilotSystem(unittest.IsolatedAsyncioTestCase):
             success = await vip_autopilot.publish_vip_trade_setup(bot, symbol="SOL")
             self.assertTrue(success)
 
-            bot.send_message.assert_called_once()
-            call_kwargs = bot.send_message.call_args.kwargs
+            bot.send_photo.assert_called_once()
+            call_kwargs = bot.send_photo.call_args.kwargs
             self.assertEqual(call_kwargs["chat_id"], config.VIP_CHANNEL_ID)
 
-            text = call_kwargs["text"]
-            self.assertIn("VIP TRADE SETUP | #SOL/USDT", text)
-            self.assertIn("🟢 LONG", text)
-            self.assertIn("Рекомендованное плечо", text)
-            self.assertIn("Зона входа:", text)
-            self.assertIn("$208.50 - $210.50", text)
-            self.assertIn("Стоп-лосс:", text)
-            self.assertIn("$204.00", text)
-            self.assertIn("TP1:", text)
-            self.assertIn("40% объема и стоп в безубыток!", text)
-            self.assertIn("TP2:", text)
-            self.assertIn("30% объема", text)
-            self.assertIn("TP3:", text)
-            self.assertIn("свободный остаток (Runner)", text)
-            self.assertIn("Квантовое обоснование:", text)
-            self.assertIn("88%", text)
+            caption = call_kwargs["caption"]
+            self.assertIn("VIP TRADE SETUP", caption)
+            self.assertIn("#SOL", caption)
+            self.assertIn("LONG", caption)
+            self.assertIn("1:3.1", caption)
 
             # Проверка кнопок WebApp и бот
             kb_obj = call_kwargs["reply_markup"]
@@ -317,9 +301,10 @@ class TestVipAutopilotSystem(unittest.IsolatedAsyncioTestCase):
             success = await vip_autopilot.publish_vip_trade_setup(bot, symbol=None)
             self.assertTrue(success)
 
-            call_kwargs = bot.send_message.call_args.kwargs
+            call_kwargs = bot.send_photo.call_args.kwargs
             # Должен быть выбран NEAR, так как у него score максимальный (92 + 10 = 102)
-            self.assertIn("VIP TRADE SETUP | #NEAR/USDT", call_kwargs["text"])
+            self.assertIn("VIP TRADE SETUP", call_kwargs["caption"])
+            self.assertIn("#NEAR", call_kwargs["caption"])
 
     # =========================================================================
     # 4. ТЕСТЫ WHALE ORDERFLOW ALERT
@@ -344,16 +329,14 @@ class TestVipAutopilotSystem(unittest.IsolatedAsyncioTestCase):
             success = await vip_autopilot.publish_vip_whale_alert(bot, force=False)
             self.assertTrue(success)
 
-            bot.send_message.assert_called_once()
-            call_kwargs = bot.send_message.call_args.kwargs
+            bot.send_photo.assert_called_once()
+            call_kwargs = bot.send_photo.call_args.kwargs
             self.assertEqual(call_kwargs["chat_id"], config.VIP_CHANNEL_ID)
 
-            text = call_kwargs["text"]
-            self.assertIn("WHALE ORDERFLOW & VOLUME RADAR", text)
-            self.assertIn("2.8x", text)
-            self.assertIn("74.5", text)
-            self.assertIn("Short-Squeeze", text)
-            self.assertIn("Инструкция для трейдеров", text)
+            caption = call_kwargs["caption"]
+            self.assertIn("WHALE RADAR", caption)
+            self.assertIn("2.8x", caption)
+            self.assertIn("74.5", caption)
 
             # Проверяем, что алерт записан в БД
             can_post = await db.can_post_alert("BTCUSDT", "VIP_WHALE", cooldown_hours=2)
@@ -375,7 +358,7 @@ class TestVipAutopilotSystem(unittest.IsolatedAsyncioTestCase):
             # force=True должен опубликовать алерт даже без рыночной аномалии
             success = await vip_autopilot.publish_vip_whale_alert(bot, force=True)
             self.assertTrue(success)
-            bot.send_message.assert_called_once()
+            bot.send_photo.assert_called_once()
 
     # =========================================================================
     # 5. ТЕСТЫ ОБРАБОТЧИКОВ АДМИНКИ (ADMIN CALLBACKS)

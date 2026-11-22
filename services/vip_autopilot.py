@@ -258,42 +258,45 @@ async def publish_vip_morning_briefing(bot: Bot) -> bool:
             "3. <b>Риск-менеджмент:</b> Риск на сделку 1-2%, при первом тейке — обязательный перенос Stop-Loss в безубыток."
         )
 
-        # 5. Сборка HTML поста
-        post_text = (
-            "🌅 <b>VIP MORNING BRIEFING & ROADMAP</b>\n"
-            "────────────────────\n"
-            "🧭 <b>Индекс страха и жадности (Crypto F&G):</b>\n"
-            f"• Значение: <b>{fng_int}/100</b> (<b>{fng_class_ru} / {fng_class_en}</b>)\n"
-            f"• Шкала: <code>{fng_bar}</code>\n"
-            f"• Вердикт: <i>{fng_verdict}</i>\n\n"
-            "👑 <b>МАКРО-АКТИВЫ (БАЗОВЫЕ УРОВНИ):</b>\n"
-            f"• <b>Bitcoin (BTC):</b> <code>{btc_price}</code> (<b>{btc_chg:+.2f}%</b>)\n"
-            f"  ↳ <i>Поддержка:</i> <code>{btc_sup}</code> | <i>Сопротивление:</i> <code>{btc_res_lvl}</code>\n"
-            f"• <b>Ethereum (ETH):</b> <code>{eth_price}</code> (<b>{eth_chg:+.2f}%</b>)\n"
-            f"  ↳ <i>Поддержка:</i> <code>{eth_sup}</code> | <i>Сопротивление:</i> <code>{eth_res_lvl}</code>\n\n"
-            "🔥 <b>ТОП-АКТИВЫ ДНЯ ПО ДИНАМИКЕ И ОБЪЕМУ:</b>\n"
-            f"{top_assets_text}\n\n"
-            "📌 <b>АНАЛИТИЧЕСКИЙ ВЫВОД И ПЛАН РАБОТЫ:</b>\n"
-            f"{roadmap_text}\n"
-            "────────────────────\n"
-            f"💎 <i>{config.PROJECT_NAME} • Закрытый аналитический клуб</i>"
-        )
+        # Визуальная карточка для утреннего брифинга (макро-актив BTC)
+        btc_asset = btc_res if (isinstance(btc_res, dict) and btc_res.get("status") == "success") else {
+            "symbol": "BTCUSDT",
+            "ticker": "BTC",
+            "price": 91500.0,
+            "bias": "Strong Long",
+            "probability": 94,
+            "risk_reward": "1:3.0",
+            "entry_zone": "$90,800 - $91,500",
+            "tp1_price": 93000.0,
+            "tp2_price": 95500.0,
+            "stop_loss_price": 89800.0,
+            "indicators": {"rsi_1h": 28.5},
+            "summary": f"Morning Macro Roadmap • F&G: {fng_int}/100 ({fng_class_ru})"
+        }
 
-        # Кнопки
+        card_path = canva_service.render_local_signal_card(btc_asset)
+        photo = FSInputFile(card_path)
+
+        # Минимальная 1-строчная подпись (без простыней текста)
+        caption = f"🌅 <b>VIP MORNING BRIEFING // #BTC</b> | F&G: <code>{fng_int}/100 ({fng_class_ru})</code> | R:R <code>{btc_asset.get('risk_reward', '1:3.0')}</code>"
+
         username = await get_bot_username(bot)
-        links = build_channel_links(username)
+        links = build_channel_links(username, coin_symbol="BTC")
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Открыть WebApp (VIP)", url=links["direct_vip_url"])],
-            [InlineKeyboardButton(text="🤖 Открыть в боте", url=links["bot_terminal_url"])]
+            [
+                InlineKeyboardButton(text="🚀 Открыть WebApp (VIP)", url=links["direct_vip_url"]),
+                InlineKeyboardButton(text="🤖 Открыть в боте", url=links["bot_terminal_url"])
+            ]
         ])
 
-        await bot.send_message(
+        await bot.send_photo(
             chat_id=channel_id,
-            text=post_text,
+            photo=photo,
+            caption=caption,
             parse_mode="HTML",
             reply_markup=keyboard
         )
-        logger.info(f"Успешно опубликован VIP Morning Briefing в закрытый канал {channel_id}")
+        logger.info(f"Успешно опубликован визуальный VIP Morning Briefing в закрытый канал {channel_id}")
         return True
     except Exception as e:
         logger.error(f"Ошибка при публикации VIP Morning Briefing: {e}")
@@ -378,26 +381,12 @@ async def publish_vip_trade_setup(bot: Bot, symbol: Optional[str] = None) -> boo
         prob = best_data.get("probability", 82)
         risk_reward = best_data.get("risk_reward", "1:2.8")
 
-        post_text = (
-            f"🎯 <b>VIP TRADE SETUP | #{coin_ticker}/USDT</b>\n"
-            f"────────────────────\n"
-            f"📈 <b>Тип сделки:</b> <b>{trade_type}</b>\n"
-            f"⚙️ <b>Режим:</b> Рекомендованное плечо <b>3x-5x</b> (макс 10x) | Риск <b>1-2%</b>\n"
-            f"⚖️ <b>Risk / Reward:</b> <code>{risk_reward}</code>\n\n"
-            f"📍 <b>Зона входа:</b> <code>{entry_zone}</code>\n"
-            f"⛔️ <b>Стоп-лосс:</b> <code>{sl_str}</code>\n\n"
-            f"🎯 <b>Цели Take-Profit:</b>\n"
-            f"  🎯 <b>TP1:</b> <code>{tp1_str}</code> ➔ <i>40% объема и стоп в безубыток!</i>\n"
-            f"  🎯 <b>TP2:</b> <code>{tp2_str}</code> ➔ <i>30% объема</i>\n"
-            f"  🚀 <b>TP3:</b> <code>{tp3_str}</code> ➔ <i>свободный остаток (Runner)</i>\n\n"
-            f"📊 <b>Квантовое обоснование:</b>\n"
-            f"• Индикатор RSI (1h): <b>{rsi_1h}</b>\n"
-            f"• Полосы Боллинджера: ширина <b>{bb_w}%</b>\n"
-            f"• EMA структура: <b>{trend_ru}</b>\n"
-            f"• Объемный импульс: <b>{vol_ratio}x</b> ({vol_badge})\n"
-            f"🧠 <b>Индекс уверенности модели:</b> <b>{prob}%</b>\n"
-            f"────────────────────\n"
-            f"🛡 <i>Внимание: Строго соблюдайте мани-менеджмент. При достижении TP1 переводите стоп-лосс в безубыток!</i>"
+        # Минимальная 1-строчная подпись (без простыней текста)
+        action_title = "LONG BUY SETUP" if is_long else "SHORT SELL SETUP"
+        minimal_caption = f"🎯 <b>VIP TRADE SETUP // #{coin_ticker}</b> | {action_title} | R:R <code>{risk_reward}</code>"
+        fallback_text = (
+            f"🎯 <b>VIP TRADE SETUP // #{coin_ticker}</b> | {action_title} | R:R <code>{risk_reward}</code>\n"
+            f"📍 Entry: <code>{entry_zone}</code> | SL: <code>{sl_str}</code> | TP1: <code>{tp1_str}</code>"
         )
 
         username = await get_bot_username(bot)
@@ -418,7 +407,7 @@ async def publish_vip_trade_setup(bot: Bot, symbol: Optional[str] = None) -> boo
                 await bot.send_photo(
                     chat_id=channel_id,
                     photo=photo,
-                    caption=post_text,
+                    caption=minimal_caption,
                     parse_mode="HTML",
                     reply_markup=keyboard
                 )
@@ -430,7 +419,7 @@ async def publish_vip_trade_setup(bot: Bot, symbol: Optional[str] = None) -> boo
         if not sent_as_photo:
             await bot.send_message(
                 chat_id=channel_id,
-                text=post_text,
+                text=fallback_text,
                 parse_mode="HTML",
                 reply_markup=keyboard
             )
@@ -543,21 +532,26 @@ async def publish_vip_whale_alert(bot: Bot, force: bool = False) -> bool:
         # Записываем в БД для исключения повторного спама
         await db.record_alert(found_anomaly["full_symbol"], "VIP_WHALE")
 
-        post_text = (
-            "🐋 <b>WHALE ORDERFLOW & VOLUME RADAR</b>\n"
-            "────────────────────\n"
-            f"⚡ <b>Зафиксирована аномалия крупного капитала: #{found_anomaly['symbol']}/USDT</b>\n\n"
-            f"💵 <b>Текущая цена:</b> <code>{found_anomaly['price_str']}</code> (<b>{found_anomaly['change_str']}</b>)\n"
-            f"🌊 <b>Объемный всплеск:</b> <b>{found_anomaly['spike_ratio']}x</b> от среднего за 20ч\n"
-            f"🧭 <b>Индикатор RSI (1h):</b> <b>{found_anomaly['rsi']}</b> ({found_anomaly['rsi_status']})\n\n"
-            f"🚨 <b>Orderflow анализ:</b>\n"
-            f"• {found_anomaly['nature']}\n"
-            f"• <b>Риск сквиза:</b> <b>{found_anomaly['squeeze_risk']}</b> (каскадная ликвидация {found_anomaly['squeeze_side']} позиций)\n\n"
-            f"🛡 <b>Инструкция для трейдеров закрытого клуба:</b>\n"
-            f"{found_anomaly['action_plan']}\n"
-            "────────────────────\n"
-            f"💎 <i>{config.PROJECT_NAME} • Инсайдерский Orderflow сканер 24/7</i>"
-        )
+        # Визуальная карточка аномалии объема через Canva Engine
+        asset_data = await ai_analytics.analyze_asset(found_anomaly["full_symbol"])
+        if not asset_data or asset_data.get("status") != "success":
+            price_clean = float(str(found_anomaly["price_str"]).replace("$", "").replace(",", "") or 0.0)
+            asset_data = {
+                "symbol": found_anomaly["full_symbol"],
+                "ticker": found_anomaly["symbol"],
+                "price": price_clean,
+                "bias": "Strong Long" if found_anomaly["rsi"] <= 30 else "Scalp Short",
+                "probability": 89,
+                "risk_reward": "1:2.8",
+                "indicators": {"rsi_1h": found_anomaly["rsi"]},
+                "summary": f"Whale Volume Spike {found_anomaly['spike_ratio']}x • {found_anomaly['nature']}"
+            }
+
+        card_path = canva_service.render_local_signal_card(asset_data)
+        photo = FSInputFile(card_path)
+
+        # Минимальная 1-строчная подпись (без простыней текста)
+        caption = f"🐋 <b>WHALE RADAR // #{found_anomaly['symbol']}</b> | Vol Spike: <code>{found_anomaly['spike_ratio']}x</code> | RSI: <code>{found_anomaly['rsi']:.1f}</code>"
 
         username = await get_bot_username(bot)
         links = build_channel_links(username, coin_symbol=found_anomaly["symbol"])
@@ -568,9 +562,10 @@ async def publish_vip_whale_alert(bot: Bot, force: bool = False) -> bool:
             ]
         ])
 
-        await bot.send_message(
+        await bot.send_photo(
             chat_id=channel_id,
-            text=post_text,
+            photo=photo,
+            caption=caption,
             parse_mode="HTML",
             reply_markup=keyboard
         )

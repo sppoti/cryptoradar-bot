@@ -32,19 +32,26 @@ class CanvaService:
     TEAM_ID: str = getattr(config, "CANVA_TEAM_ID", "oBZaQa2FDEXm2wgikuzXZ8")
     ACCOUNT_NAME: str = getattr(config, "CANVA_ACCOUNT_NAME", "KIIIER")
 
-    # Фирменная палитра и дизайн-токены (Cyberpunk / Institutional Crypto Dark Mode)
+    # Фирменная палитра и дизайн-токены (Pitch Black & Tactical Red Monospace Terminal)
     COLORS = {
-        "bg_primary": "#0B0E14",       # Глубокий обсидиановый фон
-        "bg_surface": "#151A24",       # Карточка / контейнер с эффектом матового стекла
-        "surface_border": "#2A3245",   # Тонкая рамка контейнера
-        "accent_green": "#00FF88",     # Лонг / Перепроданность / Тейк-Профит
-        "accent_red": "#FF3366",       # Шорт / Перекупленность / Стоп-Лосс
-        "accent_gold": "#F3BA2F",      # Звезды Telegram Stars / VIP бейджи
-        "accent_cyan": "#00F0FF",      # Радар / TradingView графики
-        "accent_purple": "#9945FF",    # AI Квантовый автопилот / Смарт-мани
+        "bg_canvas": "#050505",        # Pitch Black холст (абсолютный черный)
+        "bg_container": "#0A0A0A",     # Темный терминальный контейнер
+        "border_hairline": "#1E1E1E",  # Тонкая hairline рамка
+        "divider": "#161616",          # Терминальные разделители
+        "card_box": "#0D0D0D",         # Фон плашек метрик
         "text_primary": "#FFFFFF",     # Основной белый текст
-        "text_secondary": "#94A3B8",   # Второстепенный серый текст (Slate-400)
-        "badge_bg": "#1E293B",         # Фон бейджей
+        "text_secondary": "#888888",   # Второстепенный серый текст
+        "text_muted": "#888888",       # Приглушенный текст лейблов
+        "tactical_red": "#FF3333",     # Тактический красный (строго для Stop Loss и бейджа сигнала)
+        "bg_primary": "#050505",       # Совместимость
+        "bg_surface": "#0A0A0A",       # Совместимость
+        "surface_border": "#1E1E1E",   # Совместимость
+        "accent_green": "#00FF88",     # Совместимость
+        "accent_red": "#FF3333",       # Тактический красный
+        "accent_gold": "#F3BA2F",      # Совместимость
+        "accent_cyan": "#00F0FF",      # Совместимость
+        "accent_purple": "#9945FF",    # Совместимость
+        "badge_bg": "#1E1E1E",         # Фон бейджей
     }
 
     # Стандартные форматы Canva
@@ -325,9 +332,16 @@ class CanvaService:
     ) -> str:
         """
         Локальный высокопроизводительный рендерер сигнальной графической карточки (1200x675) на базе Pillow.
-        Обеспечивает 100% автономность сервиса при работе оффлайн или без активного интернет-соединения с Canva.
-        Поддерживает передачу как отдельных аргументов, так и комплексного словаря анализа (ai_analytics.analyze_asset).
+        Оформлен в утвержденном терминальном стиле Pitch Black & Tactical Red Monospace:
+        - Холст: #050505 (pitch black)
+        - Контейнер: #0A0A0A с hairline рамкой #1E1E1E
+        - Разделители: #161616
+        - Текст: #FFFFFF / #888888
+        - Тактический красный: #FF3333 строго для Stop Loss и бейджа сигнала
+        - Полное отсутствие свечений, неоновых градиентов и размытий
+        - Моноширинный шрифт Consolas / Courier New / Lucida Console
         """
+        risk_reward_str = ""
         if isinstance(symbol, dict):
             analysis = symbol
             sym_raw = analysis.get("symbol") or analysis.get("ticker", "BTCUSDT")
@@ -342,93 +356,115 @@ class CanvaService:
             rsi_val = float(indicators.get("rsi_1h") or 50.0)
             timeframe = "1H"
             winrate_pct = int(analysis.get("probability") or 94)
-            notes = notes or str(analysis.get("bias_badge") or "")
+            notes = notes or str(analysis.get("summary") or analysis.get("bias_badge") or "")
+            risk_reward_str = str(analysis.get("risk_reward") or "")
             symbol = sym_raw
+
         width, height = 1200, 675
         is_long = signal_type.upper() == "LONG"
-        accent_hex = self.COLORS["accent_green"] if is_long else self.COLORS["accent_red"]
 
-        # Создание базового темного холста
-        img = Image.new("RGBA", (width, height), color="#0B0E14")
+        # Расчет Risk/Reward если не задан
+        if not risk_reward_str:
+            rr_val = round(abs(tp2 - entry_price) / max(abs(entry_price - stop_loss), 0.0001), 2)
+            risk_reward_str = f"1:{rr_val}"
+
+        # Создание холста: Pitch Black (#050505) - строго без градиентов и без свечений
+        img = Image.new("RGB", (width, height), color="#050505")
         draw = ImageDraw.Draw(img)
 
-        # Фоновый неоновый градиент / размытие
-        glow_color = (0, 255, 136, 18) if is_long else (255, 51, 102, 18)
-        draw.ellipse([800, -100, 1300, 400], fill=glow_color)
-        draw.ellipse([-100, 400, 400, 800], fill=(0, 240, 255, 12))
-
-        # Загрузка шрифтов
+        # Загрузка шрифтов (моноширинные)
         font_large, font_title, font_medium, font_mono, font_small = self._load_fonts()
 
-        # Центральная стеклянная карточка (Glassmorphism container)
-        card_rect = [50, 50, 1150, 625]
-        draw.rounded_rectangle(card_rect, radius=20, fill="#131822", outline="#222B3D", width=2)
+        # Центральный терминальный контейнер (#0A0A0A с hairline рамкой #1E1E1E)
+        card_rect = [40, 40, 1160, 635]
+        draw.rounded_rectangle(card_rect, radius=6, fill="#0A0A0A", outline="#1E1E1E", width=1)
 
-        # Верхняя панель: Бренд + Статус
-        draw.text((85, 80), "CRYPTORADAR PRO", fill="#94A3B8", font=font_small)
-        draw.text((250, 80), "• VIP QUANTITATIVE SIGNAL", fill=self.COLORS["accent_cyan"], font=font_small)
+        # 1. Верхняя панель: Бренд + Терминальный статус
+        draw.text((65, 68), "CRYPTORADAR PRO // QUANTITATIVE TERMINAL", fill="#888888", font=font_small)
+        status_header = f"NODE: VIP_AUTOPILOT  |  SYNC: #{self.FOLDER_ID}"
+        draw.text((790, 68), status_header, fill="#888888", font=font_small)
 
-        # Бейдж папки Canva
-        folder_badge = f"CANVA SYNC: #{self.FOLDER_ID}"
-        draw.text((900, 80), folder_badge, fill="#64748B", font=font_small)
+        # Разделитель верхней панели (#161616)
+        draw.line([65, 108, 1135, 108], fill="#161616", width=1)
 
-        # Тикер и направление сделки
-        action_title = "LONG BUY" if is_long else "SHORT SELL"
-        draw.text((85, 120), symbol.upper(), fill="#FFFFFF", font=font_large)
-        
-        # Цветная плашка направления
-        badge_w = 230
-        draw.rounded_rectangle([420, 130, 420 + badge_w, 185], radius=10, fill=accent_hex)
-        draw.text((440, 140), action_title, fill="#0B0E14", font=font_title)
+        # 2. Секция тикера и бейджа сигнала
+        clean_sym = symbol.replace("USDT", "").replace("/", "").upper()
+        ticker_display = f"#{clean_sym}/USDT"
+        draw.text((65, 132), ticker_display, fill="#FFFFFF", font=font_large)
 
-        # Таймфрейм и Winrate
-        tf_badge = f"TF: {timeframe}  |  WINRATE: {winrate_pct}%"
-        draw.text((425, 195), tf_badge, fill="#94A3B8", font=font_small)
+        # Бейдж сигнала: строго тактический красный (#FF3333) для Stop Loss и бейджа сигнала
+        action_title = "LONG BUY SETUP" if is_long else "SHORT SELL SETUP"
+        badge_bbox = draw.textbbox((0, 0), action_title, font=font_title)
+        badge_text_w = badge_bbox[2] - badge_bbox[0]
+        badge_text_h = badge_bbox[3] - badge_bbox[1]
 
-        # Разделительная линия
-        draw.line([85, 240, 1115, 240], fill="#1E2738", width=1)
+        # Позиционирование бейджа справа от тикера
+        ticker_bbox = draw.textbbox((65, 132), ticker_display, font=font_large)
+        badge_x1 = max(420, ticker_bbox[2] + 30)
+        badge_y1 = 138
+        badge_w = badge_text_w + 32
+        badge_h = 44
+        draw.rounded_rectangle([badge_x1, badge_y1, badge_x1 + badge_w, badge_y1 + badge_h], radius=4, fill="#FF3333")
+        draw.text((badge_x1 + 16, badge_y1 + (badge_h - badge_text_h) // 2 - 2), action_title, fill="#050505", font=font_title)
 
-        # Сетка параметров: Entry, TP1, TP2, Stop Loss
-        col_w = 245
-        start_x = 85
-        y_label = 270
-        y_val = 305
+        # Строка параметров: TF, Winrate, Risk/Reward
+        meta_line = f"TIMEFRAME: {timeframe}  |  MODEL CONFIDENCE: {winrate_pct}%  |  RISK/REWARD: {risk_reward_str}"
+        draw.text((65, 195), meta_line, fill="#888888", font=font_small)
+
+        # Разделитель перед метриками (#161616)
+        draw.line([65, 232, 1135, 232], fill="#161616", width=1)
+
+        # 3. Сетка параметров цен: Entry, TP1, TP2, Stop Loss
+        col_w = 250
+        gap = 23
+        start_x = 65
+        box_y1 = 255
+        box_y2 = 365
 
         metrics = [
             ("ENTRY PRICE", f"${entry_price:,.2f}", "#FFFFFF"),
-            ("TAKE PROFIT 1", f"${tp1:,.2f}", self.COLORS["accent_green"]),
-            ("TAKE PROFIT 2 (MOON)", f"${tp2:,.2f}", self.COLORS["accent_green"]),
-            ("STOP LOSS", f"${stop_loss:,.2f}", self.COLORS["accent_red"]),
+            ("TAKE PROFIT 1", f"${tp1:,.2f}", "#FFFFFF"),
+            ("TAKE PROFIT 2 (RUNNER)", f"${tp2:,.2f}", "#FFFFFF"),
+            ("STOP LOSS", f"${stop_loss:,.2f}", "#FF3333"),  # Строго тактический красный #FF3333
         ]
 
         for i, (label, val, val_color) in enumerate(metrics):
-            cx = start_x + (i * col_w)
-            # Контейнер для каждой метрики
-            draw.rounded_rectangle([cx, y_label - 10, cx + col_w - 20, y_val + 50], radius=12, fill="#182030", outline="#26334D", width=1)
-            draw.text((cx + 15, y_label), label, fill="#64748B", font=font_small)
-            draw.text((cx + 15, y_val), val, fill=val_color, font=font_mono)
+            cx = start_x + (i * (col_w + gap))
+            # Терминальный бокс для метрики (#0D0D0D с рамкой #1E1E1E)
+            draw.rounded_rectangle([cx, box_y1, cx + col_w, box_y2], radius=4, fill="#0D0D0D", outline="#1E1E1E", width=1)
+            draw.text((cx + 16, box_y1 + 18), label, fill="#888888", font=font_small)
+            draw.text((cx + 16, box_y1 + 58), val, fill=val_color, font=font_mono)
 
-        # Нижняя секция: RSI индикаторная шкала и примечания
-        box_y = 390
-        draw.rounded_rectangle([85, box_y, 700, 570], radius=14, fill="#182030", outline="#26334D", width=1)
-        draw.text((110, box_y + 20), "RSI MOMENTUM DIVERGENCE", fill="#94A3B8", font=font_small)
-        
-        rsi_color = self.COLORS["accent_green"] if rsi_val <= 30 else (self.COLORS["accent_red"] if rsi_val >= 70 else "#F3BA2F")
-        draw.text((110, box_y + 55), f"RSI: {rsi_val:.1f}", fill=rsi_color, font=font_title)
-        
+        # Разделитель перед нижними блоками (#161616)
+        draw.line([65, 392, 1135, 392], fill="#161616", width=1)
+
+        # 4. Нижняя секция: 2 терминальных блока
+        lower_y1 = 415
+        lower_y2 = 610
+
+        # Левый блок: Осцилляторы и квантовая телеметрия
+        draw.rounded_rectangle([65, lower_y1, 680, lower_y2], radius=6, fill="#0D0D0D", outline="#1E1E1E", width=1)
+        draw.text((85, lower_y1 + 20), "> QUANTITATIVE TELEMETRY // OSCILLATORS", fill="#888888", font=font_small)
+        draw.text((85, lower_y1 + 52), f"RSI MOMENTUM: {rsi_val:.1f}", fill="#FFFFFF", font=font_title)
+
         status_text = "Oversold Zone (Smart-Money Reversal)" if is_long else "Overbought Extreme (Exhaustion Dump)"
-        draw.text((110, box_y + 110), f"Status: {status_text}", fill="#CBD5E1", font=font_small)
+        draw.text((85, lower_y1 + 95), f"REGIME: {status_text}", fill="#888888", font=font_small)
         if notes:
-            draw.text((110, box_y + 135), f"Quant Note: {notes}", fill="#94A3B8", font=font_small)
+            clean_note = (notes[:52] + "...") if len(notes) > 55 else notes
+            draw.text((85, lower_y1 + 125), f"QUANT NOTE: {clean_note}", fill="#888888", font=font_small)
+        else:
+            draw.text((85, lower_y1 + 125), "QUANT NOTE: Volume and momentum confluence confirmed", fill="#888888", font=font_small)
+        draw.text((85, lower_y1 + 155), "EXECUTION: Fix 40% at TP1. Move SL to Breakeven.", fill="#888888", font=font_small)
 
-        # Правый блок: Подписка и запуск бота
-        draw.rounded_rectangle([730, box_y, 1115, 570], radius=14, fill="#1A2338", outline="#2D3C5E", width=1)
-        draw.text((755, box_y + 20), "EXCLUSIVE VIP RADAR", fill=self.COLORS["accent_gold"], font=font_small)
-        draw.text((755, box_y + 55), "Автопилот в Telegram", fill="#FFFFFF", font=font_title)
-        draw.text((755, box_y + 110), "Живой сканер • Тейк-профиты • Stars / СБП", fill="#94A3B8", font=font_small)
-        draw.text((755, box_y + 135), "Запуск: t.me/cryptoradar_live_bot", fill=self.COLORS["accent_cyan"], font=font_small)
+        # Правый блок: Терминал и доступ
+        draw.rounded_rectangle([705, lower_y1, 1135, lower_y2], radius=6, fill="#0D0D0D", outline="#1E1E1E", width=1)
+        draw.text((725, lower_y1 + 20), "> TERMINAL RADAR NODE // ACCESS", fill="#888888", font=font_small)
+        draw.text((725, lower_y1 + 52), "CRYPTORADAR VIP AUTOPILOT", fill="#FFFFFF", font=font_title)
+        draw.text((725, lower_y1 + 95), "Real-time 24/7 Binance & Bybit Quant Engine", fill="#888888", font=font_small)
+        draw.text((725, lower_y1 + 125), "Mini App: WebApp / TradingView Engine", fill="#888888", font=font_small)
+        draw.text((725, lower_y1 + 155), "LAUNCH: t.me/cryptoradar_live_bot", fill="#FFFFFF", font=font_small)
 
-        # Сохранение файла
+        # 5. Сохранение файла
         if output_filename:
             target_p = Path(output_filename)
             if target_p.is_absolute() or len(target_p.parts) > 1:
@@ -442,31 +478,34 @@ class CanvaService:
 
         filepath.parent.mkdir(parents=True, exist_ok=True)
         img.save(filepath, format="PNG", quality=95)
-        
+
         logger.info(f"Локальная сигнальная карточка сгенерирована: {filepath}")
         return str(filepath)
 
     def _load_fonts(self) -> Tuple[Any, Any, Any, Any, Any]:
-        """Вспомогательный загрузчик системных шрифтов с безопасным фоллбеком."""
-        font_paths = [
-            "C:/Windows/Fonts/segoeui.ttf",
-            "C:/Windows/Fonts/arial.ttf",
+        """Загрузка системных моноширинных шрифтов (Consolas, Courier, Lucida Console) с безопасным фоллбеком."""
+        mono_fonts = [
             "C:/Windows/Fonts/consola.ttf",
+            "C:/Windows/Fonts/cour.ttf",
+            "C:/Windows/Fonts/lucon.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            "/System/Library/Fonts/SFNSMono.ttf",
+            "C:/Windows/Fonts/arial.ttf",
         ]
-        
-        primary_font = None
-        for p in font_paths:
+
+        selected_font = None
+        for p in mono_fonts:
             if os.path.exists(p):
-                primary_font = p
+                selected_font = p
                 break
 
-        if primary_font:
+        if selected_font:
             try:
-                f_large = ImageFont.truetype(primary_font, 56)
-                f_title = ImageFont.truetype(primary_font, 32)
-                f_med = ImageFont.truetype(primary_font, 24)
-                f_mono = ImageFont.truetype("C:/Windows/Fonts/consola.ttf" if os.path.exists("C:/Windows/Fonts/consola.ttf") else primary_font, 26)
-                f_small = ImageFont.truetype(primary_font, 18)
+                f_large = ImageFont.truetype(selected_font, 44)
+                f_title = ImageFont.truetype(selected_font, 24)
+                f_med = ImageFont.truetype(selected_font, 20)
+                f_mono = ImageFont.truetype(selected_font, 22)
+                f_small = ImageFont.truetype(selected_font, 15)
                 return f_large, f_title, f_med, f_mono, f_small
             except Exception as e:
                 logger.warning(f"Не удалось загрузить шрифт TrueType: {e}, переключение на дефолтный")

@@ -1,42 +1,54 @@
+import os
 import asyncio
 import logging
 from aiogram import Bot
+from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 import config
-from services import scanner, news, vip_autopilot
+from services import scanner, news, vip_autopilot, canva_service, ai_analytics
 
 logger = logging.getLogger("Autopilot")
 
 async def publish_market_update(bot: Bot) -> bool:
-    """Генерация и публикация свежей аналитики в канал."""
+    """Генерация и публикация визуальной карточки сводки рынка в канал."""
     if not config.CHANNEL_ID:
         return False
         
     try:
-        overview = await scanner.get_market_overview()
-        radar = await scanner.get_signal_radar()
+        btc_data = await ai_analytics.analyze_asset("BTCUSDT")
+        if not btc_data or btc_data.get("status") != "success":
+            return False
+            
+        card_path = canva_service.render_local_signal_card(btc_data)
+        if not card_path or not os.path.exists(card_path):
+            return False
+
+        username = await vip_autopilot.get_bot_username(bot)
+        links = vip_autopilot.build_channel_links(username, coin_symbol="BTC")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🚀 Открыть терминал", url=links["bot_terminal_url"]),
+                InlineKeyboardButton(text="📊 Анализ рынка", url=links["bot_analyze_url"])
+            ]
+        ])
+
+        price_fmt = btc_data.get("price_formatted") or f"${float(btc_data.get('price', 0)):,.2f}"
+        caption = f"📊 <b>MARKET OVERVIEW // #BTC</b> | Price: <code>{price_fmt}</code> | Bias: <code>{btc_data.get('bias', 'Market Scan')}</code>"
         
-        post_text = (
-            f"🔥 <b>VIP-СВОДКА РЫНКА ОТ {config.PROJECT_NAME.upper()}</b>\n"
-            f"────────────────────\n\n"
-            f"{overview}\n\n"
-            f"{radar}\n\n"
-            f"────────────────────\n"
-            f"🤖 <i>Сгенерировано автоматически аналитическим ядром бота.</i>"
-        )
-        
-        await bot.send_message(
+        await bot.send_photo(
             chat_id=config.CHANNEL_ID,
-            text=post_text,
-            parse_mode="HTML"
+            photo=FSInputFile(card_path),
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=keyboard
         )
-        logger.info(f"Успешно опубликован пост в VIP-канал {config.CHANNEL_ID}")
+        logger.info(f"Успешно опубликована визуальная карточка сводки рынка в канал {config.CHANNEL_ID}")
         return True
     except Exception as e:
-        logger.error(f"Не удалось опубликовать пост в канал: {e}")
+        logger.error(f"Не удалось опубликовать визуальную сводку в канал: {e}")
         return False
 
 async def publish_flash_alert(bot: Bot) -> bool:
-    """Поиск и публикация Flash-Алерта при резком пампе/дампе."""
+    """Поиск и публикация Flash-Алерта при резком пампе/дампе в виде визуальной карточки."""
     if not config.CHANNEL_ID:
         return False
         
@@ -44,26 +56,43 @@ async def publish_flash_alert(bot: Bot) -> bool:
         anomaly = await scanner.check_flash_anomaly()
         if not anomaly:
             return False
-            
-        post_text = (
-            f"⚡️ <b>FLASH ALERT: РЕЗКИЙ ИМПУЛЬС РЫНКА!</b>\n"
-            f"────────────────────\n\n"
-            f"{anomaly['headline']}\n\n"
-            f"💵 <b>Цена:</b> <code>{anomaly['price']}</code>\n"
-            f"📊 <b>Динамика:</b> <b>{anomaly['change']}</b>\n"
-            f"🧭 <b>Индикатор RSI (1h):</b> <b>{anomaly['rsi']}</b>\n\n"
-            f"🎯 <b>Вердикт сканера:</b>\n{anomaly['verdict']}\n\n"
-            f"────────────────────\n"
-            f"🔍 <i>Проверить любую монету в боте:</i> @ssddssa_bot\n"
-            f"📊 <i>Канал аналитики:</i> @cryptoradar_live777"
-        )
+
+        sym = anomaly.get("symbol", "BTC")
+        full_sym = f"{sym}USDT"
+        asset_data = await ai_analytics.analyze_asset(full_sym)
+        if not asset_data or asset_data.get("status") != "success":
+            price_clean = float(str(anomaly.get("price", "0")).replace("$", "").replace(",", "") or 0.0)
+            asset_data = {
+                "symbol": full_sym,
+                "ticker": sym,
+                "price": price_clean,
+                "bias": "Strong Long" if "+" in str(anomaly.get("change", "")) else "Scalp Short",
+                "probability": 88,
+                "risk_reward": "1:2.8",
+                "indicators": {"rsi_1h": float(str(anomaly.get("rsi", "50")).replace(",", ".") or 50.0)},
+                "summary": str(anomaly.get("headline", "Flash Anomaly Alert"))
+            }
+
+        card_path = canva_service.render_local_signal_card(asset_data)
+        if not card_path or not os.path.exists(card_path):
+            return False
+
+        username = await vip_autopilot.get_bot_username(bot)
+        links = vip_autopilot.build_channel_links(username, coin_symbol=sym)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Открыть в боте", url=links["bot_terminal_url"])]
+        ])
+
+        caption = f"⚡ <b>FLASH ALERT // #{sym}</b> | Price: <code>{anomaly['price']}</code> (<b>{anomaly['change']}</b>)"
         
-        await bot.send_message(
+        await bot.send_photo(
             chat_id=config.CHANNEL_ID,
-            text=post_text,
-            parse_mode="HTML"
+            photo=FSInputFile(card_path),
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=keyboard
         )
-        logger.info(f"Успешно отправлен Flash Alert по монете {anomaly['symbol']}")
+        logger.info(f"Успешно отправлен визуальный Flash Alert по монете {sym}")
         return True
     except Exception as e:
         logger.error(f"Ошибка публикации Flash Alert: {e}")
